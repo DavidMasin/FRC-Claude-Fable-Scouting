@@ -134,6 +134,63 @@ def test_youtube_playlist_rejected(monkeypatch):
         resolve_source("https://www.youtube.com/watch?v=abc&list=xyz")
 
 
+def _install_raising_ytdlp(monkeypatch, message, capture):
+    class FakeYDL:
+        def __init__(self, opts):
+            capture.update(opts)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, download=False):
+            raise RuntimeError(message)
+
+    mod = types.ModuleType("yt_dlp")
+    mod.YoutubeDL = FakeYDL
+    monkeypatch.setitem(sys.modules, "yt_dlp", mod)
+
+
+def test_youtube_bot_block_gets_actionable_error(monkeypatch):
+    _install_raising_ytdlp(
+        monkeypatch, "ERROR: [youtube] xyz: Sign in to confirm you're not a bot.", {})
+    with pytest.raises(IngestError) as exc:
+        resolve_source("https://www.youtube.com/watch?v=xyz")
+    msg = str(exc.value)
+    assert "bot-blocking" in msg
+    assert "upload the VOD" in msg
+    assert "YTDLP_COOKIES" in msg
+
+
+def test_other_ytdlp_errors_wrapped_without_bot_hint(monkeypatch):
+    _install_raising_ytdlp(monkeypatch, "Video unavailable", {})
+    with pytest.raises(IngestError, match="Video unavailable") as exc:
+        resolve_source("https://www.youtube.com/watch?v=xyz")
+    assert "bot-blocking" not in str(exc.value)
+
+
+def test_cookies_env_passed_to_ytdlp(monkeypatch, tmp_path):
+    captured = {}
+    _install_raising_ytdlp(monkeypatch, "whatever", captured)
+    monkeypatch.setenv("YTDLP_COOKIES", "# Netscape HTTP Cookie File\n")
+    monkeypatch.delenv("YTDLP_COOKIES_FILE", raising=False)
+    with pytest.raises(IngestError):
+        resolve_source("https://www.youtube.com/watch?v=xyz")
+    assert "cookiefile" in captured
+    from pathlib import Path
+
+    assert Path(captured["cookiefile"]).read_text().startswith("# Netscape")
+
+    # explicit file path wins over inline content
+    monkeypatch.setenv("YTDLP_COOKIES_FILE", str(tmp_path / "c.txt"))
+    captured.clear()
+    with pytest.raises(IngestError):
+        resolve_source("https://www.youtube.com/watch?v=xyz")
+    assert captured["cookiefile"] == str(tmp_path / "c.txt")
+
+
 def test_cli_ingest_probe_and_sample(synthetic_video, tmp_path, capsys):
     from frcscout.cli import main
 

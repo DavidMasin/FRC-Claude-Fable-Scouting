@@ -15,7 +15,10 @@ zones — nothing to measure.</p>
       <label>… or upload a VOD</label>
       <input type="file" name="video" accept="video/*">
       <p class="hint">Give a URL/path <em>or</em> upload a file — the upload wins
-      when both are set.</p>
+      when both are set. YouTube often bot-blocks cloud-server IPs
+      (&ldquo;Sign in to confirm&hellip;&rdquo;): uploading the VOD is the
+      reliable path, or set the <code>YTDLP_COOKIES</code> env var to a
+      cookies.txt export.</p>
 
       <label>Match key <span class="hint" style="display:inline">(used for file names; or fetch lineup via TBA when API keys are configured)</span></label>
       <input name="match_key" placeholder="2026isde1_qm14">

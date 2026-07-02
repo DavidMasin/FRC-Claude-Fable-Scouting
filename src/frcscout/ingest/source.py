@@ -8,11 +8,37 @@ dependency: `pip install -e ".[ingest]"`.
 
 from __future__ import annotations
 
+import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
 from .errors import IngestError
+
+_BOT_BLOCK_HINT = (
+    " — YouTube is bot-blocking this server's IP (common for cloud hosts). "
+    "Fixes: (1) upload the VOD file instead of a URL — most reliable; "
+    "(2) set the YTDLP_COOKIES env var to the contents of a YouTube "
+    "cookies.txt exported from a logged-in browser "
+    "(see yt-dlp's 'exporting YouTube cookies' FAQ); "
+    "(3) use a direct media URL."
+)
+
+
+def _cookie_file() -> str | None:
+    """Cookies for yt-dlp: a file path (YTDLP_COOKIES_FILE) or the cookies.txt
+    content itself (YTDLP_COOKIES — handy on PaaS where env vars are all you
+    have; written to a temp file)."""
+    path = os.environ.get("YTDLP_COOKIES_FILE")
+    if path:
+        return path
+    content = os.environ.get("YTDLP_COOKIES")
+    if content:
+        temp = Path(tempfile.gettempdir()) / "frcscout_yt_cookies.txt"
+        temp.write_text(content)
+        return str(temp)
+    return None
 
 _YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"}
 # Direct media the capture backend can open without help.
@@ -43,8 +69,17 @@ def _resolve_youtube(url: str, prefer_height: int = 720) -> SourceInfo:
         "no_warnings": True,
         "format": f"best[height<={prefer_height}]/bestvideo[height<={prefer_height}]/best",
     }
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+    cookies = _cookie_file()
+    if cookies:
+        opts["cookiefile"] = cookies
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception as exc:
+        message = str(exc)
+        hint = _BOT_BLOCK_HINT if ("not a bot" in message
+                                   or "Sign in to confirm" in message) else ""
+        raise IngestError(f"could not resolve {url}: {message}{hint}") from exc
     if info.get("_type") == "playlist":
         raise IngestError("got a playlist URL; pass a single video/stream URL")
     location = info.get("url")
