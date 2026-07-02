@@ -6,7 +6,7 @@ match schedule, and emits per-robot scouting records (fuel scoring, cycles,
 defense, Tower climb) — every event carrying a confidence and a timestamp so a
 human can verify it.
 
-## Status: Milestone 6 of 10 — team identity
+## Status: Milestone 7 of 10 — field mapping
 
 | # | Milestone | Status |
 |---|-----------|--------|
@@ -16,7 +16,7 @@ human can verify it.
 | 4 | FMS overlay OCR → phase / timer / score timeline | ✅ |
 | 5 | Robot detection + tracking (YOLO or color-blob; ByteTrack-style) | ✅ |
 | 6 | Bumper OCR + track↔team assignment | ✅ |
-| 7 | Homography → field zones | ⏳ |
+| 7 | Homography → field zones | ✅ |
 | 8 | Event detection (zone+overlay heuristics, VLM disambiguation) | ⏳ |
 | 9 | Aggregation, reconciliation, JSON/CSV export | ⏳ |
 | 10 | Live mode wrapper | ⏳ |
@@ -157,6 +157,22 @@ beat the incumbent by a margin, so one noisy read can never flip a confident
 assignment, while repeated contrary evidence can. Every assignment carries a
 confidence (softmax over that track's evidence, damped when evidence is
 thin); the debug renderer marks low-confidence labels with `?`.
+
+## Field mapping (homography + zones)
+
+```bash
+frcscout field locate --pixel 640,400     # -> field coords + zones at that pixel
+```
+
+Calibrate once per camera: click ≥4 known landmarks on a frame and record the
+pixel ↔ field-coordinate pairs in `field.calibration`. Robots map through
+their ground contact point (bottom-center of the box; the homography is only
+valid on the floor plane). Zone *names/roles* come from `rubric.json`; zone
+*geometry* is config (`field.zones`, polygons in meters — the shipped ones
+are placeholders to re-measure from the official field drawings), and a
+configured zone name that the rubric doesn't declare is rejected. Zone
+membership ("at the Tower", "in the hub zone") is what event attribution
+keys on — far more robust than trying to see a ball enter a goal.
 
 > **Note:** the committed `rubric.json` was generated in a sandbox whose
 > network policy blocks `firstfrc.blob.core.windows.net`, so all values are

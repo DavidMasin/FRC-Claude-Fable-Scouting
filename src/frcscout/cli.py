@@ -280,6 +280,32 @@ def _cmd_track(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_field_locate(args: argparse.Namespace) -> int:
+    from .config import load_config
+    from .field import FieldMap, ZoneMap
+
+    config = load_config(args.config)
+    field_config = config.get("field") or {}
+    try:
+        fmap = FieldMap.from_config(field_config)
+    except ValueError as exc:
+        print(f"ERROR: {exc} — fill in field.calibration in config", file=sys.stderr)
+        return 1
+    rubric = None
+    rubric_path = Path(config.get("rubric_path", "rubric.json"))
+    if rubric_path.exists():
+        rubric = json.loads(rubric_path.read_text())
+    zmap = ZoneMap.from_config(field_config, rubric)
+
+    px, py = (float(v) for v in args.pixel.split(","))
+    fx, fy = fmap.to_field(px, py)
+    zones = sorted(zmap.zone_names_at(fx, fy))
+    print(f"pixel ({px:g}, {py:g}) -> field ({fx:.2f} m, {fy:.2f} m)"
+          f"{'' if fmap.in_bounds(fx, fy) else '  [OUT OF BOUNDS]'}")
+    print(f"zones: {', '.join(zones) if zones else '(none)'}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="frcscout")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -360,6 +386,13 @@ def main(argv: list[str] | None = None) -> int:
     track.add_argument("--bumper-backend", default="template",
                        choices=["template", "tesseract", "paddleocr"])
     track.set_defaults(func=_cmd_track)
+
+    fieldp = sub.add_parser("field", help="field mapping tools")
+    fsub = fieldp.add_subparsers(dest="field_command", required=True)
+    locate = fsub.add_parser("locate", help="map a pixel to field coords + zones")
+    locate.add_argument("--config", default="config.yaml")
+    locate.add_argument("--pixel", required=True, metavar="X,Y")
+    locate.set_defaults(func=_cmd_field_locate)
 
     args = parser.parse_args(argv)
     return args.func(args)
