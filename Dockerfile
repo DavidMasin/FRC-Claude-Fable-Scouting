@@ -1,6 +1,7 @@
 # frcscout web UI — Railway-ready image.
 # Railway injects $PORT; job state lives in one gunicorn worker (scale with
-# threads). Mount a volume at /data so scouted matches survive deploys.
+# threads). Attach a volume at ANY mount path — the app follows Railway's
+# RAILWAY_VOLUME_MOUNT_PATH automatically (FRCSCOUT_OUT_DIR overrides).
 
 FROM python:3.11-slim
 
@@ -17,8 +18,7 @@ RUN pip install --no-cache-dir ".[ui,ingest]" gunicorn
 # seed rubric shipped with the repo; regenerate with `frcscout rubric build --fetch`
 COPY rubric.json ./rubric.json
 
-ENV FRCSCOUT_OUT_DIR=/data/out \
-    PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8080
 CMD ["sh", "-c", "gunicorn -w 1 --threads 8 --timeout 120 -b 0.0.0.0:${PORT:-8080} frcscout.ui.wsgi:app"]

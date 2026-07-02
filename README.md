@@ -56,9 +56,11 @@ The repo is Railway-ready (`Dockerfile` + `railway.json`, health check at
 1. **Railway → New Project → Deploy from GitHub repo** and pick this repo
    (`main`). Railway detects the Dockerfile and builds automatically.
    CLI alternative: `railway init && railway up`.
-2. **Add a volume** mounted at **`/data`** (Service → Attach Volume) so
-   scouted matches and uploads survive redeploys — records are written to
-   `/data/out` (`FRCSCOUT_OUT_DIR`, already set in the image).
+2. **Add a volume** (Service → right-click → Attach Volume) at **any mount
+   path** — the app follows Railway's `RAILWAY_VOLUME_MOUNT_PATH`
+   automatically and writes records/uploads to `<mount>/out`. No env var
+   needed; set `FRCSCOUT_OUT_DIR` only if you want to override the location.
+   Without a volume everything still works but resets on redeploy.
 3. **Optional env vars** (Service → Variables): `TBA_AUTH_KEY` to fetch
    lineups by match key, `FRC_EVENTS_USERNAME`/`FRC_EVENTS_AUTH_TOKEN`,
    `NEXUS_API_KEY`, `ANTHROPIC_API_KEY` for `--vlm`-style disambiguation.

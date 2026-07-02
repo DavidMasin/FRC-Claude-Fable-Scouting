@@ -30,6 +30,22 @@ def test_wsgi_entrypoint_reads_env(tmp_path, monkeypatch):
     assert client.get("/").status_code == 200
 
 
+def test_wsgi_follows_railway_volume_mount(tmp_path, monkeypatch):
+    """Whatever mount path Railway allows, records land on the volume."""
+    monkeypatch.delenv("FRCSCOUT_OUT_DIR", raising=False)
+    monkeypatch.setenv("RAILWAY_VOLUME_MOUNT_PATH", str(tmp_path / "vol"))
+    monkeypatch.setenv("FRCSCOUT_CONFIG", str(tmp_path / "none.yaml"))
+    import frcscout.ui.wsgi as wsgi
+
+    importlib.reload(wsgi)
+    assert (tmp_path / "vol" / "out" / "uploads").is_dir()
+
+    # explicit FRCSCOUT_OUT_DIR always wins over the volume default
+    monkeypatch.setenv("FRCSCOUT_OUT_DIR", str(tmp_path / "explicit"))
+    importlib.reload(wsgi)
+    assert (tmp_path / "explicit" / "uploads").is_dir()
+
+
 def test_upload_flow(tmp_path, monkeypatch):
     from frcscout.ui import create_app
 
