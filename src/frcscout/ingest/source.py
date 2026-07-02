@@ -73,15 +73,18 @@ def _resolve_youtube(url: str, prefer_height: int = 720) -> SourceInfo:
     if cookies:
         base_opts["cookiefile"] = cookies
 
-    # YouTube bot-walls the default web client on cloud IPs, but the TV/iOS
-    # player clients are often exempt — retry through them before giving up.
+    # YouTube bot-walls the default web client on cloud IPs, and some player
+    # clients return false 'DRM protected' errors — both are quirks of the
+    # *client*, not the video, so retry across clients before giving up.
+    retryable = ("not a bot", "Sign in to confirm", "DRM protected")
     attempts: list[dict] = [dict(base_opts)]
-    for client in ("tv", "ios", "web_safari"):
+    for client in ("ios", "web_safari", "tv", "mweb"):
         attempts.append(dict(base_opts, extractor_args={
             "youtube": {"player_client": [client]}}))
 
     info = None
     last_error: Exception | None = None
+    bot_blocked = False
     for opts in attempts:
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
@@ -90,13 +93,16 @@ def _resolve_youtube(url: str, prefer_height: int = 720) -> SourceInfo:
         except Exception as exc:
             last_error = exc
             message = str(exc)
-            if "not a bot" in message or "Sign in to confirm" in message:
-                continue  # bot wall: the next player client may be exempt
-            raise IngestError(f"could not resolve {url}: {message}") from exc
+            if not any(marker in message for marker in retryable):
+                raise IngestError(f"could not resolve {url}: {message}") from exc
+            bot_blocked = bot_blocked or "bot" in message.lower()
+            continue  # next player client may be exempt
     if info is None:
+        hint = _BOT_BLOCK_HINT if bot_blocked else (
+            " — every YouTube player client failed; download the video "
+            "locally with yt-dlp and use the upload field instead.")
         raise IngestError(
-            f"could not resolve {url}: {last_error}{_BOT_BLOCK_HINT}"
-        ) from last_error
+            f"could not resolve {url}: {last_error}{hint}") from last_error
     if info.get("_type") == "playlist":
         raise IngestError("got a playlist URL; pass a single video/stream URL")
     location = info.get("url")

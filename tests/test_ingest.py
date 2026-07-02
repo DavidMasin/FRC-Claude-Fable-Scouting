@@ -164,9 +164,8 @@ def test_youtube_bot_block_gets_actionable_error(monkeypatch):
     assert "YTDLP_COOKIES" in msg
 
 
-def test_bot_block_falls_back_to_other_player_clients(monkeypatch):
-    """The default web client is bot-walled; the TV client succeeds."""
-    seen_clients = []
+def _install_client_ytdlp(monkeypatch, behavior, seen_clients):
+    """behavior: client-name -> 'ok' | error message"""
 
     class FakeYDL:
         def __init__(self, opts):
@@ -182,18 +181,52 @@ def test_bot_block_falls_back_to_other_player_clients(monkeypatch):
             return False
 
         def extract_info(self, url, download=False):
-            if self.client == "tv":
-                return {"url": "https://cdn.example/via-tv.m3u8", "is_live": False,
-                        "title": "match"}
-            raise RuntimeError("Sign in to confirm you're not a bot")
+            outcome = behavior.get(self.client, "Video unavailable")
+            if outcome == "ok":
+                return {"url": f"https://cdn.example/via-{self.client}.m3u8",
+                        "is_live": False, "title": "match"}
+            raise RuntimeError(outcome)
 
     mod = types.ModuleType("yt_dlp")
     mod.YoutubeDL = FakeYDL
     monkeypatch.setitem(sys.modules, "yt_dlp", mod)
 
+
+def test_bot_block_falls_back_to_other_player_clients(monkeypatch):
+    seen = []
+    _install_client_ytdlp(monkeypatch, {
+        "default": "Sign in to confirm you're not a bot",
+        "ios": "ok",
+    }, seen)
     src = resolve_source("https://www.youtube.com/watch?v=xyz")
-    assert src.location.endswith("via-tv.m3u8")
-    assert seen_clients == ["default", "tv"]  # stopped at first success
+    assert src.location.endswith("via-ios.m3u8")
+    assert seen == ["default", "ios"]  # stopped at first success
+
+
+def test_false_drm_from_one_client_is_retried(monkeypatch):
+    """The flta case: bot wall on web, then a false 'DRM protected' from the
+    next client — a later client still resolves it."""
+    seen = []
+    _install_client_ytdlp(monkeypatch, {
+        "default": "Sign in to confirm you're not a bot",
+        "ios": "This video is DRM protected",
+        "web_safari": "ok",
+    }, seen)
+    src = resolve_source("https://www.youtube.com/watch?v=xyz")
+    assert src.location.endswith("via-web_safari.m3u8")
+    assert seen == ["default", "ios", "web_safari"]
+
+
+def test_all_clients_fail_without_bot_wall(monkeypatch):
+    seen = []
+    _install_client_ytdlp(monkeypatch, {
+        client: "This video is DRM protected"
+        for client in ("default", "ios", "web_safari", "tv", "mweb")
+    }, seen)
+    with pytest.raises(IngestError, match="upload field") as exc:
+        resolve_source("https://www.youtube.com/watch?v=xyz")
+    assert "bot-blocking" not in str(exc.value)
+    assert len(seen) == 5  # every client was tried
 
 
 def test_other_ytdlp_errors_wrapped_without_bot_hint(monkeypatch):
