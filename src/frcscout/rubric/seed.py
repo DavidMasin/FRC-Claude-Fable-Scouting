@@ -217,6 +217,9 @@ _SEED: dict[str, Any] = {
         "defense_start": {"scoring_ref": None},
         "defense_end": {"scoring_ref": None},
         "climb_attempt_start": {"scoring_ref": None},
+        "score_correction": {"scoring_ref": None,
+                             "description": "scorekeeper adjusted the overlay score "
+                             "downward; surfaced for reconciliation, never attributed"},
         "track_lost": {"scoring_ref": None, "description": "tracking lost the robot; "
                        "no events fabricated while lost"},
     },

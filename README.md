@@ -6,7 +6,7 @@ match schedule, and emits per-robot scouting records (fuel scoring, cycles,
 defense, Tower climb) — every event carrying a confidence and a timestamp so a
 human can verify it.
 
-## Status: Milestone 7 of 10 — field mapping
+## Status: Milestone 8 of 10 — event detection
 
 | # | Milestone | Status |
 |---|-----------|--------|
@@ -17,7 +17,7 @@ human can verify it.
 | 5 | Robot detection + tracking (YOLO or color-blob; ByteTrack-style) | ✅ |
 | 6 | Bumper OCR + track↔team assignment | ✅ |
 | 7 | Homography → field zones | ✅ |
-| 8 | Event detection (zone+overlay heuristics, VLM disambiguation) | ⏳ |
+| 8 | Event detection (zone+overlay heuristics, VLM disambiguation) | ✅ |
 | 9 | Aggregation, reconciliation, JSON/CSV export | ⏳ |
 | 10 | Live mode wrapper | ⏳ |
 
@@ -174,6 +174,23 @@ configured zone name that the rubric doesn't declare is rejected. Zone
 membership ("at the Tower", "in the hub zone") is what event attribution
 keys on — far more robust than trying to see a ball enter a goal.
 
+## Event detection
+
+`EventEngine` (src/frcscout/events/) consumes per-frame context — phase,
+tracks with field positions and zones, overlay score changes — and emits
+`ScoutingEvent`s, every one carrying confidence, source, timestamp, frame
+index, and flags. The workhorse: an overlay score jump for an alliance is
+credited to that alliance's robot recently in its scoring zone. One candidate
+→ conf 0.85; several → the VLM disambiguator (Claude, sparse + disk-cached,
+`events/vlm.py`) if configured, else most-recent entrant at conf 0.5 with an
+`ambiguous_attribution` flag; none → unattributed event with
+`no_robot_in_zone` — never fabricated onto a robot. Wrong-alliance robots are
+never credited. Endgame deltas matching Tower point values with one robot at
+the tower become `climb_level_N`; tower-zone dwell emits `climb_attempt_start`;
+defense = sustained proximity to an opponent in their half; cycles from
+loading-zone → hub-zone transitions. Points come from `rubric.json` — events
+built on unverified rubric values carry `points_unverified`.
+
 > **Note:** the committed `rubric.json` was generated in a sandbox whose
 > network policy blocks `firstfrc.blob.core.windows.net`, so all values are
 > currently `needs-verification` (seeded from public secondary sources).
@@ -235,6 +252,13 @@ src/frcscout/
     ocr.py              OCR backends: template (built-in) / tesseract / paddleocr
     parse.py            timer/score parsing -> OverlayReading
     timeline.py         phase machine + debounced score timeline
+  events/
+    model.py            ScoutingEvent (confidence + source + frame + flags)
+    engine.py           zone+overlay attribution, climbs, defense, cycles
+    vlm.py              Claude disambiguator (sparse, disk-cached)
+  field/
+    homography.py       pixel -> field coords (ground-point mapping)
+    zones.py            zone polygons; names validated against rubric
   identify/
     bumper_ocr.py       bumper-band crop + digit OCR (evidence only)
     assignment.py       fuzzy match + per-alliance assignment solver w/ hysteresis
