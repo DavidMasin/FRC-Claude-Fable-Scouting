@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ key }} — frcscout{% endblock %}
+{% block content %}
+<h1>{{ key }}</h1>
+<p class="sub score" style="font-size:16px">
+  <span style="color:var(--red-alliance)">■</span>
+  <span class="r">{{ record.alliances.red.overlay_final }}</span>
+  &nbsp;–&nbsp;
+  <span class="r">{{ record.alliances.blue.overlay_final }}</span>
+  <span style="color:var(--blue-alliance)">■</span>
+  &nbsp;· final score from the broadcast overlay
+</p>
+
+{% for alliance in ("red", "blue") %}
+  {% if record.alliances[alliance].flag %}
+  <div class="warnbox">⚠ <b>{{ alliance }}</b>: vision attributed
+    {{ record.alliances[alliance].vision_attributed_points }} points but the
+    overlay scoreboard says {{ record.alliances[alliance].overlay_final }} —
+    review the flagged events below.</div>
+  {% endif %}
+{% endfor %}
+
+<h2>Robots</h2>
+<div class="grid cols-3" id="robot-cards"></div>
+
+<h2>Fuel scored</h2>
+<div class="card chart-card">
+  <div class="legend">
+    <span><span class="sw" style="background:var(--red-alliance)"></span>Red alliance</span>
+    <span><span class="sw" style="background:var(--blue-alliance)"></span>Blue alliance</span>
+  </div>
+  <div id="fuel-chart"></div>
+</div>
+
+<h2>Event timeline</h2>
+<div class="card chart-card">
+  <div class="legend">
+    <span><span class="sw" style="background:var(--red-alliance)"></span>Red alliance</span>
+    <span><span class="sw" style="background:var(--blue-alliance)"></span>Blue alliance</span>
+    <span class="sub" style="margin:0">hover a dot for details</span>
+  </div>
+  <div id="timeline-chart"></div>
+</div>
+
+<h2>All events</h2>
+<div class="card">
+  <table class="events" id="events-table">
+    <thead><tr><th>match&nbsp;t</th><th>type</th><th>team</th><th>alliance</th>
+    <th>count</th><th>pts</th><th>conf</th><th>source</th><th>flags</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<h2>Downloads</h2>
+<div class="downloads">
+  {% for f in downloads %}<a href="{{ url_for('files', name=f) }}">{{ f }}</a>{% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>window.MATCH_KEY = {{ key|tojson }};</script>
+<script src="{{ url_for('static', filename='match.js') }}"></script>
+{% endblock %}

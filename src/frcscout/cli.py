@@ -457,6 +457,17 @@ def _cmd_dataset_mine(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_dataset_synth(args: argparse.Namespace) -> int:
+    from .dataset.synth import generate_synthetic_dataset
+
+    stats = generate_synthetic_dataset(args.out, n_images=args.n, seed=args.seed)
+    print(json.dumps(stats, indent=2))
+    print(f"\ntrain: yolo detect train data={args.out}/dataset.yaml model=yolo11n.pt")
+    print("mix in real labeled frames (see README data sources) as soon as you can —")
+    print("synthetic-only detectors overfit to the renderer.")
+    return 0
+
+
 def _cmd_push(args: argparse.Namespace) -> int:
     from .config import load_config
     from .integrations import push_match
@@ -500,6 +511,19 @@ def _cmd_report(args: argparse.Namespace) -> int:
     paths = write_reports(record, args.out_dir, langs)
     for p in paths:
         print(f"wrote {p}")
+    return 0
+
+
+def _cmd_ui(args: argparse.Namespace) -> int:
+    try:
+        from .ui import create_app
+    except ImportError:
+        print("the UI needs Flask: pip install -e '.[ui]'", file=sys.stderr)
+        return 2
+
+    app = create_app(config_path=args.config, out_dir=args.out_dir)
+    print(f"frcscout UI -> http://{args.host}:{args.port}")
+    app.run(host=args.host, port=args.port, debug=args.debug, threaded=True)
     return 0
 
 
@@ -637,6 +661,12 @@ def main(argv: list[str] | None = None) -> int:
                       help="seconds between pseudo-labeled keeps")
     mine.set_defaults(func=_cmd_dataset_mine)
 
+    synth = dsub.add_parser("synth", help="generate a synthetic bootstrap dataset")
+    synth.add_argument("--out", default="data/synth")
+    synth.add_argument("--n", type=int, default=300)
+    synth.add_argument("--seed", type=int, default=0)
+    synth.set_defaults(func=_cmd_dataset_synth)
+
     push = sub.add_parser("push", help="push a match record to the Galaxia stack")
     push.add_argument("record", help="out/<match>.json")
     push.add_argument("--config", default="config.yaml")
@@ -654,6 +684,14 @@ def main(argv: list[str] | None = None) -> int:
     report.add_argument("--out-dir", default="out")
     report.add_argument("--langs", default="en,he")
     report.set_defaults(func=_cmd_report)
+
+    ui = sub.add_parser("ui", help="launch the web dashboard")
+    ui.add_argument("--host", default="127.0.0.1")
+    ui.add_argument("--port", type=int, default=5000)
+    ui.add_argument("--config", default="config.yaml")
+    ui.add_argument("--out-dir", default="out")
+    ui.add_argument("--debug", action="store_true")
+    ui.set_defaults(func=_cmd_ui)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}run #{{ job.job_id }} — frcscout{% endblock %}
+{% block content %}
+<h1 id="job-title"><span class="spinner" id="spin"></span>Run #{{ job.job_id }} · {{ job.match_key }}</h1>
+<p class="sub" id="job-status">starting…</p>
+<div id="job-error"></div>
+
+<div class="card">
+  <h2 style="margin-top:0">Live events</h2>
+  <div class="feed" id="feed"><div class="t">waiting for the first event…</div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>window.JOB_ID = {{ job.job_id }};</script>
+<script src="{{ url_for('static', filename='job.js') }}"></script>
+{% endblock %}

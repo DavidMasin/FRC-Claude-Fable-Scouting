@@ -73,6 +73,9 @@ class ScoutingPipeline:
         self.regions = overlay_cfg.get("regions") or {}
         self.ocr = get_backend(overlay_cfg.get("ocr_backend", "template"))
         self.timeline = OverlayTimeline.from_rubric(rubric)
+        # no configured regions -> find them from the stream itself
+        self._autodetect_buf: list = []
+        self._autodetect_failures = 0
 
         self.detector = detector or ColorBlobDetector()
         self.bumper_band = (0.0, 1.0) if detector is None else (0.55, 1.0)
@@ -132,14 +135,45 @@ class ScoutingPipeline:
             zones: frozenset[str] = frozenset()
             if self.fieldmap is not None:
                 field_xy = self.fieldmap.track_position(tr.xyxy)
-                if self.zonemap is not None:
-                    zones = frozenset(self.zonemap.zone_names_at(*field_xy))
+            elif self.zonemap is not None:  # pixel-band mode: ground point in px
+                x0, _, x1, y1 = tr.xyxy
+                field_xy = ((x0 + x1) / 2, y1)
+            if field_xy is not None and self.zonemap is not None:
+                zones = frozenset(self.zonemap.zone_names_at(*field_xy))
             a = assignments.get(tr.track_id)
             snaps.append(TrackSnapshot(
                 track_id=tr.track_id, alliance=tr.alliance,
                 team=a.team if a else None, xyxy=tr.xyxy,
                 field_xy=field_xy, zones=zones))
         return snaps
+
+    def _maybe_autodetect_overlay(self, frame) -> None:
+        """Accumulate spaced frames and locate the timer/score regions."""
+        from .overlay.autodetect import autodetect_regions
+
+        buf = self._autodetect_buf
+        if buf and frame.t_video - buf[-1][0] < 1.5:
+            return
+        buf.append((frame.t_video, frame.image))
+        if len(buf) < 5:
+            return
+        try:
+            self.regions = autodetect_regions([f for _, f in buf], self.ocr)
+            self._autodetect_buf = []
+        except ValueError:
+            self._autodetect_failures += 1
+            buf.pop(0)  # slide the window toward live play
+
+    def _activate_pixel_zones(self, confirmed, frame_shape) -> None:
+        """No homography configured: fall back to pixel-band zones, with the
+        red side inferred from where the red robots actually are."""
+        from .field.autozones import infer_red_side, pixel_zone_map
+
+        h, w = frame_shape
+        self.zonemap = pixel_zone_map(w, h, infer_red_side(confirmed))
+        # defense heuristics work in whatever units positions are in
+        self.engine.field_length_m = float(w)
+        self.engine.defense_dist_m = 0.12 * w
 
     def _track_lost_events(self, frame):
         from .events.model import ScoutingEvent
@@ -186,10 +220,15 @@ class ScoutingPipeline:
                     n_frames += 1
                     last_t = frame.t_video
                     # overlay first: it works even during replays/cuts
-                    reading = read_overlay(frame.image, frame.t_video,
-                                           self.regions, self.ocr)
-                    tl_events = self.timeline.add(reading)
-                    score_changes = [e for e in tl_events if isinstance(e, ScoreChange)]
+                    if not self.regions:
+                        self._maybe_autodetect_overlay(frame)
+                    score_changes = []
+                    if self.regions:
+                        reading = read_overlay(frame.image, frame.t_video,
+                                               self.regions, self.ocr)
+                        tl_events = self.timeline.add(reading)
+                        score_changes = [e for e in tl_events
+                                         if isinstance(e, ScoreChange)]
 
                     if not self.scene_guard.stable(frame.image):
                         n_unstable += 1
@@ -209,6 +248,9 @@ class ScoutingPipeline:
 
                     if not self._seeded and len(confirmed) == 6:
                         self.assigner.seed_station_prior(confirmed)
+                        if self.fieldmap is None and self.zonemap is None:
+                            self._activate_pixel_zones(confirmed,
+                                                       frame.image.shape[:2])
                         self._seeded = True
                     for tr in confirmed:
                         digits, conf = read_bumper(frame.image, tr.xyxy, self.ocr,

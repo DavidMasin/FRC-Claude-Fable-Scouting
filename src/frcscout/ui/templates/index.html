@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}frcscout — matches{% endblock %}
+{% block content %}
+<h1>Scout a match</h1>
+<p class="sub">Point it at a VOD file, direct URL, or YouTube stream. With no
+config it auto-detects the score overlay and uses calibration-free field
+zones — nothing to measure.</p>
+
+<div class="grid cols-2">
+  <div class="card">
+    <form class="start" method="post" action="/api/scout">
+      <label>Video source</label>
+      <input name="source" placeholder="match.mp4 · https://youtube.com/watch?v=…" required>
+
+      <label>Match key <span class="hint" style="display:inline">(used for file names; or fetch lineup via TBA when API keys are configured)</span></label>
+      <input name="match_key" placeholder="2026isde1_qm14">
+
+      <div class="row">
+        <div>
+          <label>Red teams (stations 1–3)</label>
+          <input name="red_teams" placeholder="1690, 2630, 3339">
+        </div>
+        <div>
+          <label>Blue teams (stations 1–3)</label>
+          <input name="blue_teams" placeholder="5987, 1577, 4590">
+        </div>
+      </div>
+      <p class="hint">Leave the team fields empty to fetch the lineup from The
+      Blue Alliance / FRC Events / Nexus using the match key (needs API keys in
+      config.yaml).</p>
+
+      <div class="row3">
+        <div>
+          <label>Mode</label>
+          <select name="mode"><option value="replay">replay (VOD)</option>
+          <option value="live">live</option></select>
+        </div>
+        <div>
+          <label>Sample FPS</label>
+          <input name="fps" value="6">
+        </div>
+        <div>
+          <label>Start at (s)</label>
+          <input name="start" value="0">
+        </div>
+      </div>
+      <button class="primary" type="submit">Start scouting</button>
+    </form>
+  </div>
+
+  <div>
+    {% if jobs %}
+    <div class="card">
+      <h2 style="margin-top:0">Runs</h2>
+      {% for job in jobs %}
+      <a class="match-row" href="{{ url_for('job_page', job_id=job.job_id) }}">
+        <span class="key">#{{ job.job_id }} · {{ job.match_key }}</span>
+        <span class="pill {{ job.status }}">{{ job.status }}</span>
+        <span class="sub" style="margin:0">{{ job.events|length }} events</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<h2>Scouted matches</h2>
+{% if matches %}
+<div class="card" style="padding: 6px 20px;">
+  {% for m in matches %}
+  <a class="match-row" href="{{ url_for('match_page', key=m.match_key) }}">
+    <span class="key">{{ m.match_key }}</span>
+    <span class="score">
+      <span class="r">{{ m.alliances.red.overlay_final }}</span> –
+      <span class="r">{{ m.alliances.blue.overlay_final }}</span>
+    </span>
+    <span class="sub" style="margin:0">{{ m.robots|length }} robots ·
+      {{ m.unattributed_events|length }} unattributed</span>
+    {% if m.alliances.red.flag or m.alliances.blue.flag %}
+    <span class="pill error">score mismatch</span>
+    {% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<p class="sub">Nothing scouted yet — run your first match above.</p>
+{% endif %}
+{% endblock %}

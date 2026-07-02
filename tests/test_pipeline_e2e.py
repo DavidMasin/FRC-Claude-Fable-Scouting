@@ -188,3 +188,29 @@ def test_scout_cli_end_to_end(match_video, tmp_path, capsys):
 
     csv_text = (out_dir / "2026isde1_qm14.csv").read_text()
     assert "1690" in csv_text and "level_2" in csv_text
+
+
+def test_scout_zero_config_auto_mode(match_video, tmp_path):
+    """No overlay regions, no homography, nothing measured: the pipeline
+    auto-detects the overlay and falls back to pixel-band zones."""
+    from frcscout.pipeline import ScoutingPipeline
+    from frcscout.rubric.build import build_rubric
+
+    rubric, _ = build_rubric(None)
+    pipeline = ScoutingPipeline({}, rubric, LINEUP)  # empty config
+    result = pipeline.run(match_video, sample_fps=2)
+    record = result.record
+
+    assert pipeline.regions, "overlay regions were not auto-detected"
+    assert record["alliances"]["red"]["overlay_final"] == 32
+    assert record["alliances"]["blue"]["overlay_final"] == 25
+    assert record["alliances"]["red"].get("flag") is None
+    assert record["alliances"]["blue"].get("flag") is None
+
+    robots = {r["team"]: r for r in record["robots"]}
+    assert robots[1690]["auto"]["fuel_scored"] == 12
+    assert robots[1690]["endgame"]["climb"] == "level_2"
+    assert robots[5987]["teleop"]["fuel_scored"] == 25
+    assert len(robots[2630]["teleop"]["cycles"]) == 1
+    for team in RED + BLUE:
+        assert robots[team]["assignment_confidence"] > 0.5

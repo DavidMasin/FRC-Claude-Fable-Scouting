@@ -22,13 +22,66 @@ human can verify it.
 | 10 | Live/replay pipeline (`frcscout scout`) w/ scene-cut guard | ✅ |
 | + | Active-learning dataset miner (`frcscout dataset mine`) | ✅ |
 | + | Galaxia push / Statbotics EPA cross-check / bilingual reports | ✅ |
+| + | Web UI dashboard (`frcscout ui`) | ✅ |
+| + | Zero-calibration auto mode (overlay auto-detect + pixel zones) | ✅ |
+| + | Synthetic training data (`frcscout dataset synth`) | ✅ |
 
 Remaining before real-event use: verify `rubric.json` against the actual
-manual (`frcscout rubric build --fetch`), train YOLO weights on labeled
-broadcast frames (`frcscout dataset mine` builds the dataset + label queue),
-measure zone polygons from the field drawings, and calibrate the homography
-per broadcast camera. Everything is unit/e2e-tested against synthetic
-broadcasts.
+manual (`frcscout rubric build --fetch`) and train YOLO weights (start from
+`dataset synth` + the real datasets below). Calibration is now optional —
+with nothing configured the pipeline auto-detects the overlay and uses
+pixel-band zones; a measured homography just makes zone logic sharper.
+
+## Web UI
+
+```bash
+pip install -e ".[ui]"
+frcscout ui                      # -> http://127.0.0.1:5000
+```
+
+Start a run from the browser: paste a video path/URL, type the six team
+numbers (or just a match key when API keys are configured), hit *Start
+scouting*. You get a live event feed while it runs, then a match dashboard:
+per-robot cards (auto/teleop fuel, cycles, climb, defense, identity-
+confidence meter, flags), a fuel bar chart, a hoverable event timeline with
+phase markers, the full event table, and download buttons for the JSON /
+CSV / bilingual reports. Light and dark theme follow the system; the
+alliance palette is CVD-validated in both.
+
+## Zero-calibration mode
+
+With an empty config the pipeline configures itself:
+
+- **overlay**: crop regions are auto-detected from the stream (decreasing
+  timer + flanking score integers), no measuring;
+- **zones**: without a homography it falls back to pixel bands — each
+  alliance's side and a neutral middle, with the red side inferred from
+  where the red robots actually start. Hub/tower share the band, so
+  attribution is coarser than with a measured homography (events carry the
+  same confidences either way); add `field.calibration` whenever you want
+  real field coordinates.
+
+The zero-config e2e test scouts the full synthetic match this way with
+identical results to the calibrated run.
+
+## Robot detection data
+
+Two immediate options, best combined:
+
+- `frcscout dataset synth --n 500` renders a labeled synthetic set (robots
+  with red/blue bumpers + numbers, fuel, overlay bar, blur/lighting/occlusion
+  jitter) — enough to bootstrap a first detector with zero labeling work.
+- Real community datasets to mix in (synthetic-only detectors overfit):
+  [FRC robots on Roboflow Universe](https://universe.roboflow.com/frc-08aim/frc-robots-fx5cu)
+  (~3.3k labeled robot images + pretrained model) and
+  [Dataset Colab](https://www.chiefdelphi.com/t/introducing-dataset-colab-an-object-detection-dataset-collaboration-software/447259)
+  (~4.8k robot images collected by FRC teams). Export in YOLO format and
+  merge with the synth set; class names are in `dataset.yaml`.
+
+Then `yolo detect train data=data/synth/dataset.yaml model=yolo11n.pt`,
+point `models.detector_weights` at the result, and refine with
+`frcscout dataset mine` (active learning) on real event VODs. Until you have
+weights, the color-blob detector keeps everything running.
 
 ## Quick start (full pipeline)
 
@@ -317,6 +370,12 @@ src/frcscout/
     export.py           per-match JSON + flat CSV
   dataset/
     miner.py            active learning: pseudo-labels + human label queue
+    synth.py            synthetic labeled bootstrap dataset
+  ui/
+    app.py              Flask dashboard (jobs, live feed, match pages)
+    jobs.py             background run manager
+  field/autozones.py    calibration-free pixel-band zones
+  overlay/autodetect.py automatic overlay-region discovery
   integrations/
     galaxia.py          push records to the Galaxia scouting stack
     statbotics.py       EPA cross-check (informational outlier flags)

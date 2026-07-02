@@ -15,7 +15,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "flask>=3.0"]
+ui = ["flask>=3.0"]
 # Later milestones (kept out of the base install so milestone 1 stays light):
 vision = ["opencv-python>=4.9", "ultralytics>=8.2", "numpy>=1.26"]
 ocr = ["paddleocr>=2.7", "pytesseract>=0.3"]
@@ -26,6 +27,9 @@ frcscout = "frcscout.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+frcscout = ["ui/templates/*.html", "ui/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}frcscout{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="{{ url_for('index') }}">
+    <span class="brand-mark"></span> frcscout
+    <span class="brand-sub">REBUILT 2026 · vision scouting</span>
+  </a>
+</header>
+<main class="page">
+{% block content %}{% endblock %}
+</main>
+<div id="tooltip" class="tooltip" hidden></div>
+{% block scripts %}{% endblock %}
+</body>
+</html>
