@@ -164,6 +164,38 @@ def test_youtube_bot_block_gets_actionable_error(monkeypatch):
     assert "YTDLP_COOKIES" in msg
 
 
+def test_bot_block_falls_back_to_other_player_clients(monkeypatch):
+    """The default web client is bot-walled; the TV client succeeds."""
+    seen_clients = []
+
+    class FakeYDL:
+        def __init__(self, opts):
+            client = (opts.get("extractor_args") or {}).get(
+                "youtube", {}).get("player_client")
+            self.client = client[0] if client else "default"
+            seen_clients.append(self.client)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, download=False):
+            if self.client == "tv":
+                return {"url": "https://cdn.example/via-tv.m3u8", "is_live": False,
+                        "title": "match"}
+            raise RuntimeError("Sign in to confirm you're not a bot")
+
+    mod = types.ModuleType("yt_dlp")
+    mod.YoutubeDL = FakeYDL
+    monkeypatch.setitem(sys.modules, "yt_dlp", mod)
+
+    src = resolve_source("https://www.youtube.com/watch?v=xyz")
+    assert src.location.endswith("via-tv.m3u8")
+    assert seen_clients == ["default", "tv"]  # stopped at first success
+
+
 def test_other_ytdlp_errors_wrapped_without_bot_hint(monkeypatch):
     _install_raising_ytdlp(monkeypatch, "Video unavailable", {})
     with pytest.raises(IngestError, match="Video unavailable") as exc:

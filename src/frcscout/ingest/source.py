@@ -64,22 +64,39 @@ def _resolve_youtube(url: str, prefer_height: int = 720) -> SourceInfo:
 
     # Prefer a single muxed (or video-only) stream near prefer_height — the
     # pipeline needs video only, and 720p is plenty for detection/OCR.
-    opts = {
+    base_opts = {
         "quiet": True,
         "no_warnings": True,
         "format": f"best[height<={prefer_height}]/bestvideo[height<={prefer_height}]/best",
     }
     cookies = _cookie_file()
     if cookies:
-        opts["cookiefile"] = cookies
-    try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-    except Exception as exc:
-        message = str(exc)
-        hint = _BOT_BLOCK_HINT if ("not a bot" in message
-                                   or "Sign in to confirm" in message) else ""
-        raise IngestError(f"could not resolve {url}: {message}{hint}") from exc
+        base_opts["cookiefile"] = cookies
+
+    # YouTube bot-walls the default web client on cloud IPs, but the TV/iOS
+    # player clients are often exempt — retry through them before giving up.
+    attempts: list[dict] = [dict(base_opts)]
+    for client in ("tv", "ios", "web_safari"):
+        attempts.append(dict(base_opts, extractor_args={
+            "youtube": {"player_client": [client]}}))
+
+    info = None
+    last_error: Exception | None = None
+    for opts in attempts:
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            break
+        except Exception as exc:
+            last_error = exc
+            message = str(exc)
+            if "not a bot" in message or "Sign in to confirm" in message:
+                continue  # bot wall: the next player client may be exempt
+            raise IngestError(f"could not resolve {url}: {message}") from exc
+    if info is None:
+        raise IngestError(
+            f"could not resolve {url}: {last_error}{_BOT_BLOCK_HINT}"
+        ) from last_error
     if info.get("_type") == "playlist":
         raise IngestError("got a playlist URL; pass a single video/stream URL")
     location = info.get("url")
