@@ -69,19 +69,21 @@ def test_short_lived_noise_tracks_dont_emit_track_lost():
     assert pipeline._track_lost_events(frame) == []
 
 
-def test_long_lived_or_identified_tracks_do_emit():
+def test_only_identified_tracks_emit_track_lost():
+    """Broadcast camera switches lose every live track constantly — only a
+    robot we actually identified is worth a tracking-gap event."""
     pipeline = _pipeline()
     for _ in range(4):
         pipeline.assigner.add_ocr(7, "red", "1690", conf=0.9)
     pipeline.tracker.tracks = [
-        _lost_track(5, hits=30),                 # long-lived: reported
+        _lost_track(5, hits=30),                 # long-lived but anonymous: silent
         _lost_track(7, hits=4),                  # identified as 1690: reported
         _lost_track(9, hits=3),                  # noise: silent
     ]
     frame = SimpleNamespace(t_video=50.0, index=1500)
     events = pipeline._track_lost_events(frame)
-    assert {e.track_id for e in events} == {5, 7}
-    assert next(e for e in events if e.track_id == 7).team == 1690
+    assert {e.track_id for e in events} == {7}
+    assert events[0].team == 1690
 
 
 # ---- detector: sparse blobs are noise -----------------------------------------------

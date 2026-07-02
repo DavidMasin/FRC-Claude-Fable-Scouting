@@ -68,6 +68,13 @@ class OverlayTimeline:
         # a match number). Rejected outright and counted as region suspicion.
         self.hard_max_delta = hard_max_delta
         self.suspect_deltas = {"red": 0, "blue": 0}
+        # a real scorekeeper correction is rare (~1/match). A region that
+        # keeps bouncing (score up, "correction" back down, repeat) is
+        # reading an animation or a neighboring digit: after this many
+        # corrections the alliance's score events are suppressed — totals
+        # keep tracking, but bounces stop fabricating fuel.
+        self.max_corrections = 3
+        self.corrections = {"red": 0, "blue": 0}
 
         self.phase = PRE_MATCH
         self.scores = {"red": 0, "blue": 0}
@@ -177,6 +184,12 @@ class OverlayTimeline:
 
         self.scores[alliance] = value
         self._pending[alliance] = None
+        if delta < 0:
+            self.corrections[alliance] += 1
+        if self.corrections[alliance] >= self.max_corrections:
+            # oscillating region: keep the running total honest, emit nothing
+            self.suspect_deltas[alliance] += 1
+            return []
         return [ScoreChange(
             t_video=pending.first_t,
             alliance=alliance,

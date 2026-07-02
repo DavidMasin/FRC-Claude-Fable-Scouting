@@ -160,6 +160,26 @@ def test_impossible_delta_rejected_and_counted():
     assert change.total == 4
 
 
+def test_oscillating_region_gets_suppressed():
+    """Region alternates reading '9' and '49' (neighboring digit caught
+    intermittently): after max_corrections bounces, no more phantom fuel
+    events — but the running total stays honest (the flta ×126 case)."""
+    tl = OverlayTimeline()
+    events = []
+    value = 9
+    for cycle in range(12):
+        base_t = cycle * 20
+        events += _feed(tl, [(base_t + i, 100, value, 0) for i in range(4)])
+        value = 49 if value == 9 else 9
+    changes = [e for e in events if isinstance(e, ScoreChange)]
+    # the first bounces get through, then suppression kicks in for good
+    assert 0 < len(changes) <= 7
+    assert changes[-1].t_video < 8 * 20  # nothing emitted in the later cycles
+    assert tl.corrections["red"] >= tl.max_corrections
+    assert tl.suspect_deltas["red"] > 0
+    assert tl.scores["red"] in (9, 49)  # total still tracks the readings
+
+
 def test_score_correction_downward():
     tl = OverlayTimeline()
     _feed(tl, [(0, 100, 20, 0), (1, 99, 20, 0)])

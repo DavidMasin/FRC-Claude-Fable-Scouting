@@ -185,11 +185,11 @@ class ScoutingPipeline:
             if tr.state == LOST and tr.track_id not in self._lost_reported:
                 self._lost_reported.add(tr.track_id)
                 a = assignments.get(tr.track_id)
-                # only robots worth reporting: an identified track or one
-                # that lived a while — short-lived noise blobs on real
-                # footage would otherwise flood the record
-                identified = a is not None and a.team is not None and a.confidence >= 0.3
-                if not identified and tr.hits < 15:
+                # only *identified* robots report tracking gaps. Broadcast
+                # camera switches kill every live track several times a
+                # minute — long-lived-but-anonymous blobs produced 1000+
+                # track_lost events on real footage
+                if a is None or a.team is None or a.confidence < 0.3:
                     continue
                 events.append(ScoutingEvent(
                     t_video=frame.t_video, type="track_lost",

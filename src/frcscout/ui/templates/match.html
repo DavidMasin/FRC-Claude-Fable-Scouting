@@ -21,11 +21,11 @@
   {% endif %}
   {% if a.overlay_suspect_deltas %}
   <div class="warnbox">⚠ <b>{{ alliance }}</b>: the score OCR produced
-    {{ a.overlay_suspect_deltas }} physically impossible reading(s) — the
-    overlay crop region is probably wrong for this broadcast layout. Run
-    <code>frcscout overlay autodetect</code> on the VOD and put the printed
-    regions in config, then re-scout. Treat this match's scores as
-    unreliable.</div>
+    {{ a.overlay_suspect_deltas }} impossible or oscillating reading(s) —
+    the overlay crop region is misreading this broadcast layout (wrong box,
+    caught a neighboring digit, or an animated overlay). Measure the regions
+    once (<code>frcscout overlay autodetect</code> on the VOD, or configure
+    them by hand) and re-scout. Treat this match's scores as unreliable.</div>
   {% endif %}
 {% endfor %}
 
