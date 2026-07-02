@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+data/*.pdf
+data/*.htm
+data/*.html
+config.yaml
+*.mp4
+*.mkv
+runs/
+weights/*.pt

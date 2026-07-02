@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "frcscout"
+version = "0.1.0"
+description = "Automated FRC vision scouting from a live stream (2026 REBUILT)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pypdf>=4.0",
+    "PyYAML>=6.0",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+# Later milestones (kept out of the base install so milestone 1 stays light):
+vision = ["opencv-python>=4.9", "ultralytics>=8.2", "numpy>=1.26"]
+ocr = ["paddleocr>=2.7", "pytesseract>=0.3"]
+ingest = ["yt-dlp>=2025.1.1", "streamlink>=6.5"]
+
+[project.scripts]
+frcscout = "frcscout.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

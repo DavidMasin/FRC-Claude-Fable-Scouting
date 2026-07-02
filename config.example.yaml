@@ -1,0 +1,48 @@
+# Copy to config.yaml and fill in. config.yaml is gitignored.
+
+event_key: "2026isde1"          # TBA event key
+match_key: "2026isde1_qm14"     # TBA match key
+
+apis:
+  tba:
+    base_url: "https://www.thebluealliance.com/api/v3"
+    auth_key: ""                # X-TBA-Auth-Key
+  frc_events:
+    base_url: "https://frc-api.firstinspires.org/v3.0"
+    username: ""
+    auth_token: ""
+  nexus:
+    base_url: "https://frc.nexus/api/v1"
+    api_key: ""
+  statbotics:
+    base_url: "http://localhost:8000"   # self-hosted instance (optional)
+  anthropic:
+    api_key: ""                 # for VLM disambiguation (milestone 8)
+    model: "claude-fable-5"
+
+stream:
+  url: ""                       # YouTube live/VOD URL
+  mode: "replay"                # replay | live
+  detect_fps: 6                 # detection sampling rate; tracker interpolates between
+
+rubric_path: "rubric.json"
+
+# Overlay crop regions are per-broadcast-layout, in fractional (x, y, w, h)
+# of the frame. Auto-detection (milestone 4) refines these.
+overlay:
+  layout: "firstinspires_2026_default"
+  regions:
+    match_timer: [0.44, 0.02, 0.12, 0.06]
+    red_score:   [0.30, 0.02, 0.10, 0.06]
+    blue_score:  [0.60, 0.02, 0.10, 0.06]
+    phase:       [0.44, 0.08, 0.12, 0.04]
+
+models:
+  detector_weights: "weights/frc_rebuilt_yolo.pt"   # milestone 5
+  tracker: "bytetrack"
+  bumper_ocr: "paddleocr"       # paddleocr | tesseract
+
+thresholds:
+  detection_conf: 0.35
+  assignment_min_conf: 0.60     # below this a track stays "unassigned"
+  ocr_reassign_margin: 0.25     # OCR must beat current assignment by this much

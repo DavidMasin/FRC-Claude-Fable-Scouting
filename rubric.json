@@ -1,0 +1,383 @@
+{
+  "game": "REBUILT presented by Haas",
+  "season": 2026,
+  "manual": {
+    "pdf_url": "https://firstfrc.blob.core.windows.net/frc2026/Manual/2026GameManual.pdf",
+    "html_url": "https://firstfrc.blob.core.windows.net/frc2026/Manual/HTML/2026GameManual.htm",
+    "version": null,
+    "retrieved_at": null,
+    "parsed": false
+  },
+  "match_timing": {
+    "auto_s": {
+      "value": 20,
+      "status": "needs-verification",
+      "provenance": "frcmanual.com/2026 (unofficial mirror, summary)",
+      "note": "AUTO period length in seconds"
+    },
+    "teleop_s": {
+      "value": 140,
+      "status": "needs-verification",
+      "provenance": "frcmanual.com/2026 (unofficial mirror, summary)",
+      "note": "TELEOP length (2:20) incl. endgame"
+    },
+    "transition_shift_s": {
+      "value": 10,
+      "status": "needs-verification",
+      "provenance": "team2502.com/game-breakdown (team summary)",
+      "note": "teleop clock 2:20-2:10"
+    },
+    "shift_s": {
+      "value": 25,
+      "status": "needs-verification",
+      "provenance": "team2502.com/game-breakdown (team summary)",
+      "note": "each of SHIFTs 1-4"
+    },
+    "endgame_s": {
+      "value": 30,
+      "status": "needs-verification",
+      "provenance": "team2502.com/game-breakdown (team summary)",
+      "note": "teleop clock 0:30-0:00; all HUBs active"
+    }
+  },
+  "phases": [
+    {
+      "name": "auto",
+      "duration_s": {
+        "value": 20,
+        "status": "needs-verification",
+        "provenance": "frcmanual.com/2026 (unofficial mirror, summary)"
+      },
+      "clock": "counts down 0:20 -> 0:00"
+    },
+    {
+      "name": "transition_shift",
+      "duration_s": {
+        "value": 10,
+        "status": "needs-verification",
+        "provenance": "team2502.com/game-breakdown (team summary)"
+      },
+      "clock": "teleop clock 2:20 -> 2:10"
+    },
+    {
+      "name": "shift_1",
+      "duration_s": {
+        "value": 25,
+        "status": "needs-verification",
+        "provenance": "team2502.com/game-breakdown (team summary)"
+      },
+      "clock": "2:10 -> 1:45"
+    },
+    {
+      "name": "shift_2",
+      "duration_s": {
+        "value": 25,
+        "status": "needs-verification",
+        "provenance": "team2502.com/game-breakdown (team summary)"
+      },
+      "clock": "1:45 -> 1:20"
+    },
+    {
+      "name": "shift_3",
+      "duration_s": {
+        "value": 25,
+        "status": "needs-verification",
+        "provenance": "team2502.com/game-breakdown (team summary)"
+      },
+      "clock": "1:20 -> 0:55"
+    },
+    {
+      "name": "shift_4",
+      "duration_s": {
+        "value": 25,
+        "status": "needs-verification",
+        "provenance": "team2502.com/game-breakdown (team summary)"
+      },
+      "clock": "0:55 -> 0:30"
+    },
+    {
+      "name": "endgame",
+      "duration_s": {
+        "value": 30,
+        "status": "needs-verification",
+        "provenance": "team2502.com/game-breakdown (team summary)"
+      },
+      "clock": "0:30 -> 0:00"
+    }
+  ],
+  "scoring": {
+    "fuel_hub_auto": {
+      "phase": "auto",
+      "description": "FUEL scored in the alliance's active HUB during AUTO",
+      "points": {
+        "value": 1,
+        "status": "needs-verification",
+        "provenance": "frcmanual.com/2026 (unofficial mirror, summary)"
+      },
+      "per": "fuel"
+    },
+    "fuel_hub_teleop": {
+      "phase": "teleop",
+      "description": "FUEL scored in an active HUB during TELEOP",
+      "points": {
+        "value": 1,
+        "status": "needs-verification",
+        "provenance": "frcmanual.com/2026 (unofficial mirror, summary)"
+      },
+      "per": "fuel"
+    },
+    "tower_level_1_auto": {
+      "phase": "auto",
+      "description": "Robot climbs to TOWER LEVEL 1 in AUTO (off carpet/tower base); secondary sources say at most 2 robots may earn this in AUTO — verify against the manual",
+      "points": {
+        "value": 15,
+        "status": "needs-verification",
+        "provenance": "team2502.com/game-breakdown (team summary)"
+      },
+      "per": "robot"
+    },
+    "tower_level_1_teleop": {
+      "phase": "endgame",
+      "description": "TOWER LEVEL 1: robot no longer touching carpet or tower base",
+      "points": {
+        "value": 10,
+        "status": "needs-verification",
+        "provenance": "frctools.com/2026/rule/6.5 (unofficial rule mirror)"
+      },
+      "per": "robot"
+    },
+    "tower_level_2_teleop": {
+      "phase": "endgame",
+      "description": "TOWER LEVEL 2: bumpers completely above the LOW RUNG",
+      "points": {
+        "value": 20,
+        "status": "needs-verification",
+        "provenance": "frctools.com/2026/rule/6.5 (unofficial rule mirror)"
+      },
+      "per": "robot"
+    },
+    "tower_level_3_teleop": {
+      "phase": "endgame",
+      "description": "TOWER LEVEL 3: bumpers completely above the MID RUNG",
+      "points": {
+        "value": 30,
+        "status": "needs-verification",
+        "provenance": "frctools.com/2026/rule/6.5 (unofficial rule mirror)"
+      },
+      "per": "robot"
+    },
+    "auto_leave": {
+      "phase": "auto",
+      "description": "LEAVE/mobility credit in AUTO, if REBUILT awards one",
+      "points": {
+        "value": null,
+        "status": "missing",
+        "provenance": null,
+        "note": "not confirmed to exist in REBUILT; do not emit until verified against the manual"
+      },
+      "per": "robot"
+    },
+    "fouls_awarded": {
+      "phase": "any",
+      "description": "FOUL/TECH FOUL points awarded to the opposing alliance",
+      "points": {
+        "value": null,
+        "status": "missing",
+        "provenance": null,
+        "note": "foul point values not yet parsed from manual"
+      },
+      "per": "foul"
+    }
+  },
+  "ranking_points": {
+    "win": {
+      "description": "Winning alliance",
+      "ranking_points": {
+        "value": 3,
+        "status": "needs-verification",
+        "provenance": "frcmanual.com/2026 (unofficial mirror, summary)"
+      }
+    },
+    "tie": {
+      "description": "Tied match",
+      "ranking_points": {
+        "value": 1,
+        "status": "needs-verification",
+        "provenance": "frcmanual.com/2026 (unofficial mirror, summary)"
+      }
+    },
+    "energized": {
+      "description": "Alliance scores at least N FUEL in the HUB over the match",
+      "threshold": {
+        "value": 100,
+        "status": "needs-verification",
+        "provenance": "frcmanual.com/2026 (unofficial mirror, summary)",
+        "note": "fuel count"
+      },
+      "ranking_points": {
+        "value": 1,
+        "status": "needs-verification",
+        "provenance": "frcmanual.com/2026 (unofficial mirror, summary)"
+      }
+    },
+    "supercharged": {
+      "description": "Alliance scores at least N FUEL in the HUB over the match",
+      "threshold": {
+        "value": 360,
+        "status": "needs-verification",
+        "provenance": "frcmanual.com/2026 (unofficial mirror, summary)",
+        "note": "fuel count; team updates may have changed this — verify"
+      },
+      "ranking_points": {
+        "value": 1,
+        "status": "needs-verification",
+        "provenance": "frcmanual.com/2026 (unofficial mirror, summary)"
+      }
+    },
+    "traversal": {
+      "description": "Alliance earns at least N TOWER points in the match",
+      "threshold": {
+        "value": 50,
+        "status": "needs-verification",
+        "provenance": "frcmanual.com/2026 (unofficial mirror, summary)",
+        "note": "tower points"
+      },
+      "ranking_points": {
+        "value": 1,
+        "status": "needs-verification",
+        "provenance": "frcmanual.com/2026 (unofficial mirror, summary)"
+      }
+    }
+  },
+  "mechanics": {
+    "hub_activation": {
+      "description": "HUBs alternate being active during teleop SHIFTs; FUEL only scores in an active HUB. Active-shift order is determined by AUTO performance. All HUBs are active during endgame.",
+      "status": "needs-verification",
+      "provenance": "community.firstinspires.org 2026 scoreboard/stream graphics doc",
+      "implications": [
+        "overlay score deltas can only come from the alliance whose HUB is active",
+        "hub LED state on broadcast (solid=active, pulsing=deactivating, off=inactive) is an additional OCR/vision cue"
+      ]
+    },
+    "tower_level_progression": {
+      "description": "A robot earns TOWER points for a single LEVEL in TELEOP; a robot that scored TOWER points in AUTO may also earn TELEOP tower points.",
+      "status": "needs-verification",
+      "provenance": "frctools.com/2026/rule/6.5 (unofficial rule mirror)"
+    }
+  },
+  "field": {
+    "game_piece": {
+      "name": "FUEL",
+      "description": "yellow foam ball",
+      "diameter_in": {
+        "value": 5.91,
+        "status": "needs-verification",
+        "provenance": "frcmanual.com/2026 (unofficial mirror, summary)",
+        "note": "15 cm"
+      }
+    },
+    "tower": {
+      "width_in": {
+        "value": 32.25,
+        "status": "needs-verification",
+        "provenance": "TE-26500 Tower build instructions (official field assets)"
+      },
+      "low_rung_height_in": {
+        "value": 27,
+        "status": "needs-verification",
+        "provenance": "TE-26500 Tower build instructions (official field assets)"
+      },
+      "mid_rung_height_in": {
+        "value": 45,
+        "status": "needs-verification",
+        "provenance": "TE-26500 Tower build instructions (official field assets)"
+      },
+      "high_rung_height_in": {
+        "value": 63,
+        "status": "needs-verification",
+        "provenance": "TE-26500 Tower build instructions (official field assets)"
+      }
+    }
+  },
+  "zones": [
+    {
+      "name": "hub_zone_red",
+      "role": "scoring",
+      "alliance": "red"
+    },
+    {
+      "name": "hub_zone_blue",
+      "role": "scoring",
+      "alliance": "blue"
+    },
+    {
+      "name": "tower_zone_red",
+      "role": "endgame",
+      "alliance": "red"
+    },
+    {
+      "name": "tower_zone_blue",
+      "role": "endgame",
+      "alliance": "blue"
+    },
+    {
+      "name": "loading_zone_red",
+      "role": "acquisition",
+      "alliance": "red"
+    },
+    {
+      "name": "loading_zone_blue",
+      "role": "acquisition",
+      "alliance": "blue"
+    },
+    {
+      "name": "neutral_zone",
+      "role": "transit",
+      "alliance": null
+    }
+  ],
+  "event_types": {
+    "fuel_scored": {
+      "scoring_ref": "fuel_hub_teleop",
+      "auto_ref": "fuel_hub_auto",
+      "description": "FUEL enters active HUB, attributed to a robot"
+    },
+    "climb_level_1": {
+      "scoring_ref": "tower_level_1_teleop",
+      "auto_ref": "tower_level_1_auto"
+    },
+    "climb_level_2": {
+      "scoring_ref": "tower_level_2_teleop"
+    },
+    "climb_level_3": {
+      "scoring_ref": "tower_level_3_teleop"
+    },
+    "auto_leave": {
+      "scoring_ref": "auto_leave"
+    },
+    "foul_committed": {
+      "scoring_ref": "fouls_awarded"
+    },
+    "cycle_start": {
+      "scoring_ref": null,
+      "description": "robot enters loading zone"
+    },
+    "cycle_end": {
+      "scoring_ref": null,
+      "description": "robot completes scoring attempt"
+    },
+    "defense_start": {
+      "scoring_ref": null
+    },
+    "defense_end": {
+      "scoring_ref": null
+    },
+    "climb_attempt_start": {
+      "scoring_ref": null
+    },
+    "track_lost": {
+      "scoring_ref": null,
+      "description": "tracking lost the robot; no events fabricated while lost"
+    }
+  }
+}

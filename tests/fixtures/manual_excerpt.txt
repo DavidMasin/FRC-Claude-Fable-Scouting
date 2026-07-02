@@ -1,0 +1,29 @@
+Version: TU22 2026 FIRST Robotics Competition Game Manual
+REBUILT presented by Haas
+
+4 Game Overview
+In REBUILT, two ALLIANCES of three teams each compete to score FUEL in their
+HUB and climb their TOWER. During the first 20 seconds of the MATCH, ROBOTS
+operate autonomously. During the remaining 2 minutes and 20 seconds, drivers
+control their ROBOTS. During the final 30 seconds of the MATCH, the ENDGAME,
+all HUBS are active and ROBOTS may climb their TOWER.
+
+6.5 Point Values
+Each FUEL scored in the active HUB during AUTO is worth 1 point.
+Each FUEL scored in an active HUB during TELEOP is worth 1 point.
+
+TOWER points are awarded as follows:
+A ROBOT that achieves LEVEL 1 during AUTO earns 15 points.
+A ROBOT that achieves LEVEL 1 during TELEOP earns 10 points.
+A ROBOT that achieves LEVEL 2 earns 20 points.
+A ROBOT that achieves LEVEL 3 earns 30 points.
+
+6.6 Ranking Points
+ENERGIZED: an ALLIANCE that scores at least 100 FUEL in their HUB earns 1
+ranking point.
+SUPERCHARGED: an ALLIANCE that scores at least 360 FUEL in their HUB earns 1
+ranking point.
+TRAVERSAL: an ALLIANCE that earns at least 50 TOWER points earns 1 ranking
+point.
+At the conclusion of the MATCH, the winning ALLIANCE is awarded 3 ranking
+points. A tied MATCH awards each ALLIANCE 1 ranking point.
