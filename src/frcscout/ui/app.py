@@ -74,7 +74,8 @@ def create_app(config_path: str = "config.yaml", out_dir: str = "out") -> Flask:
                 start_s=float(params.get("start") or 0),
                 duration_s=float(params["duration"]) if params.get("duration") else None,
                 mode=params.get("mode", "replay"),
-                on_event=lambda ev: job.events.append(ev.to_dict()))
+                on_event=lambda ev: job.events.append(ev.to_dict()),
+                should_stop=lambda: job.cancel_requested)
             job.record = result.record
             job.n_frames = result.n_frames
             job.n_unstable = result.n_unstable
@@ -141,6 +142,12 @@ def create_app(config_path: str = "config.yaml", out_dir: str = "out") -> Flask:
         if request.is_json:
             return jsonify(job.to_dict(include_events=False)), 202
         return redirect(url_for("job_page", job_id=job.job_id))
+
+    @app.post("/api/jobs/<int:job_id>/cancel")
+    def api_job_cancel(job_id: int):
+        job = manager.get(job_id) or abort(404)
+        job.cancel_requested = True
+        return jsonify(job.to_dict(include_events=False))
 
     @app.get("/api/jobs/<int:job_id>")
     def api_job(job_id: int):

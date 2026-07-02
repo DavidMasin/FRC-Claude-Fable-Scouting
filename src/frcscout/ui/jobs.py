@@ -20,6 +20,7 @@ class Job:
     record: dict | None = None
     n_frames: int = 0
     n_unstable: int = 0
+    cancel_requested: bool = False
     started_at: float = field(default_factory=time.time)
     finished_at: float | None = None
 
@@ -33,6 +34,7 @@ class Job:
             "n_events": len(self.events),
             "n_frames": self.n_frames,
             "n_unstable": self.n_unstable,
+            "cancelled": self.cancel_requested,
             "elapsed_s": round((self.finished_at or time.time()) - self.started_at, 1),
         }
         if include_events:

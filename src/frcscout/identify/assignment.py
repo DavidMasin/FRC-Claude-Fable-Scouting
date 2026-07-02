@@ -49,6 +49,11 @@ class Assignment:
     evidence: float  # total accumulated score mass behind this track
 
 
+# noisy footage spawns hundreds of junk tracks; only the best-evidenced few
+# per alliance enter the (combinatorial) solve
+_MAX_SOLVE_TRACKS = 8
+
+
 class TeamAssigner:
     def __init__(self, lineup: MatchLineup, min_conf: float = 0.6,
                  reassign_margin: float = 0.25, min_similarity: float = 0.5) -> None:
@@ -60,10 +65,12 @@ class TeamAssigner:
         self._scores: dict[int, dict[int, float]] = {}
         self._alliance: dict[int, str] = {}
         self._incumbent: dict[str, dict[int, int]] = {"red": {}, "blue": {}}
+        self._cache: dict[int, Assignment] | None = None
 
     # ---- evidence -------------------------------------------------------
 
     def _bucket(self, track_id: int, alliance: str) -> dict[int, float]:
+        self._cache = None
         self._alliance[track_id] = alliance
         return self._scores.setdefault(
             track_id, {team: 0.0 for team in self.lineup.teams(alliance)})
@@ -97,6 +104,18 @@ class TeamAssigner:
         track_ids = [tid for tid, a in self._alliance.items() if a == alliance]
         if not track_ids:
             return {}
+        if len(track_ids) > _MAX_SOLVE_TRACKS:
+            # keep the incumbents plus the best-evidenced challengers: the
+            # solve is C(n,3)*3! so n must stay small no matter how many
+            # junk tracks a noisy detector produced
+            keep = set(self._incumbent[alliance]) & set(track_ids)
+            by_evidence = sorted(track_ids, reverse=True,
+                                 key=lambda tid: sum(self._scores[tid].values()))
+            for tid in by_evidence:
+                if len(keep) >= _MAX_SOLVE_TRACKS:
+                    break
+                keep.add(tid)
+            track_ids = list(keep)
 
         def total(mapping: dict[int, int]) -> float:
             return sum(self._scores[tid][team] for tid, team in mapping.items())
@@ -120,7 +139,10 @@ class TeamAssigner:
         return best
 
     def assignments(self) -> dict[int, Assignment]:
-        """Current track→team assignment with confidences."""
+        """Current track→team assignment with confidences. Cached until new
+        evidence arrives — callers hit this several times per frame."""
+        if self._cache is not None:
+            return self._cache
         out: dict[int, Assignment] = {}
         solved: dict[int, int] = {}
         for alliance in ("red", "blue"):
@@ -137,6 +159,7 @@ class TeamAssigner:
             softmax = exps[team] / sum(exps.values())
             damp = 1.0 - math.exp(-evidence)
             out[tid] = Assignment(team=team, confidence=softmax * damp, evidence=evidence)
+        self._cache = out
         return out
 
     def team_labels(self) -> dict[int, str]:

@@ -400,7 +400,8 @@ def _cmd_scout(args: argparse.Namespace) -> int:
             result = pipeline.run(args.source, sample_fps=args.fps,
                                   start_s=args.start, duration_s=args.duration,
                                   mode=args.mode, on_event=on_event,
-                                  debug_video=args.debug_video)
+                                  debug_video=args.debug_video,
+                                  stop_at_match_end=not args.run_to_eof)
         except IngestError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
@@ -643,6 +644,9 @@ def main(argv: list[str] | None = None) -> int:
     scout.add_argument("--duration", type=float)
     scout.add_argument("--out-dir", default="out")
     scout.add_argument("--debug-video", metavar="OUT.mp4")
+    scout.add_argument("--run-to-eof", action="store_true",
+                       help="keep processing after the match ends "
+                            "(default: stop once post-match is detected)")
     scout.set_defaults(func=_cmd_scout)
 
     dataset = sub.add_parser("dataset", help="detector training-data tools")

@@ -40,6 +40,8 @@ class ColorBlobDetector:
             if not (self.min_area_frac <= area / frame_area <= self.max_area_frac):
                 continue
             fill = area / max(1, w * h)          # bumper blobs are dense
+            if fill < 0.25:                       # sparse blob: crowd/banner noise
+                continue
             out.append(Detection(
                 xyxy=(float(x), float(y), float(x + w), float(y + h)),
                 conf=min(0.95, 0.5 + 0.5 * fill),

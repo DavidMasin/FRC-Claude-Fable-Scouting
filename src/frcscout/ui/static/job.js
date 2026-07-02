@@ -6,6 +6,13 @@
   let offset = 0;
   let first = true;
 
+  const cancelBtn = document.getElementById("cancel");
+  cancelBtn.addEventListener("click", async () => {
+    cancelBtn.disabled = true;
+    cancelBtn.textContent = "stopping — aggregating…";
+    await fetch(`/api/jobs/${window.JOB_ID}/cancel`, { method: "POST" });
+  });
+
   function fmt(ev) {
     const t = ev.match_t != null ? ev.match_t : ev.t;
     const who = ev.team != null ? "team " + ev.team : (ev.alliance || "—");
@@ -34,12 +41,14 @@
 
     if (job.status === "done" && job.match_url) {
       document.getElementById("spin").remove();
+      cancelBtn.remove();
       status.innerHTML += ` — <a href="${job.match_url}">view match report →</a>`;
       window.location = job.match_url;
       return;
     }
     if (job.status === "error") {
       document.getElementById("spin").remove();
+      cancelBtn.remove();
       document.getElementById("job-error").innerHTML =
         `<div class="warnbox">${job.error}</div>`;
       return;

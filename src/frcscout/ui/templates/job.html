@@ -3,6 +3,8 @@
 {% block content %}
 <h1 id="job-title"><span class="spinner" id="spin"></span>Run #{{ job.job_id }} · {{ job.match_key }}</h1>
 <p class="sub" id="job-status">starting…</p>
+<p><button class="primary" id="cancel" type="button"
+   style="background:var(--critical)">Stop &amp; aggregate what we have</button></p>
 <div id="job-error"></div>
 
 <div class="card">

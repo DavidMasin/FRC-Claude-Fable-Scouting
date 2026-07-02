@@ -185,6 +185,12 @@ class ScoutingPipeline:
             if tr.state == LOST and tr.track_id not in self._lost_reported:
                 self._lost_reported.add(tr.track_id)
                 a = assignments.get(tr.track_id)
+                # only robots worth reporting: an identified track or one
+                # that lived a while — short-lived noise blobs on real
+                # footage would otherwise flood the record
+                identified = a is not None and a.team is not None and a.confidence >= 0.3
+                if not identified and tr.hits < 15:
+                    continue
                 events.append(ScoutingEvent(
                     t_video=frame.t_video, type="track_lost",
                     match_time_s=self.timeline.match_time(),
@@ -199,12 +205,13 @@ class ScoutingPipeline:
 
     def run(self, source: str, sample_fps: float = 6.0, start_s: float = 0.0,
             duration_s: float | None = None, mode: str = "replay",
-            on_event=None, debug_video: str | None = None) -> PipelineResult:
+            on_event=None, debug_video: str | None = None,
+            stop_at_match_end: bool = True, should_stop=None) -> PipelineResult:
         from .events.engine import FrameContext
         from .identify import read_bumper
         from .ingest import FrameIterator, resolve_source
         from .overlay.parse import read_overlay
-        from .overlay.timeline import ScoreChange
+        from .overlay.timeline import POST_MATCH, ScoreChange
         from .vision.debug import DebugVideoWriter, draw_tracks
 
         src = resolve_source(source)
@@ -213,10 +220,13 @@ class ScoutingPipeline:
         n_frames = 0
         n_unstable = 0
         last_t = 0.0
+        post_match_since: float | None = None
         try:
             with FrameIterator(src.location, sample_fps=sample_fps, start_s=start_s,
                                duration_s=duration_s, live=live) as frames:
                 for frame in frames:
+                    if should_stop is not None and should_stop():
+                        break
                     n_frames += 1
                     last_t = frame.t_video
                     # overlay first: it works even during replays/cuts
@@ -229,6 +239,15 @@ class ScoutingPipeline:
                         tl_events = self.timeline.add(reading)
                         score_changes = [e for e in tl_events
                                          if isinstance(e, ScoreChange)]
+
+                    # one match scouted, stop — event VODs run for hours
+                    if stop_at_match_end:
+                        if self.timeline.phase == POST_MATCH:
+                            post_match_since = post_match_since or frame.t_video
+                            if frame.t_video - post_match_since > 5.0:
+                                break
+                        else:
+                            post_match_since = None
 
                     if not self.scene_guard.stable(frame.image):
                         n_unstable += 1
@@ -252,7 +271,10 @@ class ScoutingPipeline:
                             self._activate_pixel_zones(confirmed,
                                                        frame.image.shape[:2])
                         self._seeded = True
-                    for tr in confirmed:
+                    # OCR the longest-lived tracks first, capped — noisy
+                    # footage can confirm dozens of junk tracks per frame
+                    for tr in sorted(confirmed, key=lambda t: t.hits,
+                                     reverse=True)[:12]:
                         digits, conf = read_bumper(frame.image, tr.xyxy, self.ocr,
                                                    band=self.bumper_band)
                         if digits and tr.alliance:

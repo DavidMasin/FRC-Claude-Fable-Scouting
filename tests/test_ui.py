@@ -91,6 +91,29 @@ def test_full_job_flow(client, match_video):
     assert report.status_code == 200
 
 
+def test_cancel_aggregates_partial_record(client, match_video):
+    resp = client.post("/api/scout", json={
+        "source": match_video, "match_key": "2026isde1_qm14",
+        "red_teams": ", ".join(map(str, RED)),
+        "blue_teams": ", ".join(map(str, BLUE)),
+        "fps": "2",
+    })
+    job_id = resp.get_json()["job_id"]
+    assert client.post(f"/api/jobs/{job_id}/cancel").status_code == 200
+
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        job = client.get(f"/api/jobs/{job_id}").get_json()
+        if job["status"] != "running":
+            break
+        time.sleep(0.3)
+    # cancelled early, but the job still finishes with a (partial) record
+    assert job["status"] == "done", job.get("error")
+    assert job["cancelled"] is True
+    assert job["n_frames"] < 336
+    assert client.get("/api/matches/2026isde1_qm14").status_code == 200
+
+
 def test_job_error_surfaces(client):
     resp = client.post("/api/scout", json={
         "source": "/nonexistent/file.mp4", "match_key": "2026x_qm1",
