@@ -178,6 +178,72 @@ def _cmd_overlay_read(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_track(args: argparse.Namespace) -> int:
+    from .ingest import FrameIterator, IngestError, resolve_source
+    from .vision import ColorBlobDetector, IouTracker
+    from .vision.debug import DebugVideoWriter, draw_tracks
+    from .vision.tracker import LOST
+
+    if args.detector == "yolo":
+        from .config import load_config
+        from .vision.yolo_detector import YoloDetector
+
+        config = load_config(args.config)
+        weights = (config.get("models") or {}).get("detector_weights")
+        if not weights or not Path(weights).exists():
+            print(f"no detector weights at {weights!r} — train/download them "
+                  "or use --detector color", file=sys.stderr)
+            return 2
+        detector = YoloDetector(weights,
+                                conf=(config.get("thresholds") or {}).get("detection_conf", 0.35))
+    else:
+        detector = ColorBlobDetector()
+
+    tracker = IouTracker()
+    writer = None
+    n_frames = 0
+    lost_events = 0
+    was_lost: set[int] = set()
+    try:
+        src = resolve_source(args.source)
+        with FrameIterator(src.location, sample_fps=args.fps, start_s=args.start,
+                           duration_s=args.duration, live=src.is_live) as frames:
+            for frame in frames:
+                shape = frame.image.shape[:2]
+                tracker.update(detector.detect(frame.image), frame.t_video, shape)
+                n_frames += 1
+                for tr in tracker.tracks:
+                    if tr.state == LOST and tr.track_id not in was_lost:
+                        was_lost.add(tr.track_id)
+                        lost_events += 1
+                    elif tr.state != LOST:
+                        was_lost.discard(tr.track_id)
+                if args.debug_video:
+                    if writer is None:
+                        writer = DebugVideoWriter(args.debug_video, args.fps,
+                                                  (shape[1], shape[0]))
+                    writer.write(draw_tracks(frame.image, tracker.tracks))
+    except IngestError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        if writer is not None:
+            writer.close()
+
+    confirmed = [tr for tr in tracker.tracks if tr.state == "confirmed"]
+    by_alliance = {"red": 0, "blue": 0, None: 0}
+    for tr in confirmed:
+        by_alliance[tr.alliance] = by_alliance.get(tr.alliance, 0) + 1
+    print(f"processed {n_frames} sampled frames")
+    print(f"confirmed tracks: {len(confirmed)} "
+          f"(red {by_alliance['red']}, blue {by_alliance['blue']}, "
+          f"unknown {by_alliance[None]})")
+    print(f"lost-track episodes: {lost_events}")
+    if args.debug_video:
+        print(f"debug video: {args.debug_video}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="frcscout")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -242,6 +308,17 @@ def main(argv: list[str] | None = None) -> int:
     oread.add_argument("--expect-final", metavar="RED:BLUE",
                        help="validate the OCR'd final score, e.g. 112:98")
     oread.set_defaults(func=_cmd_overlay_read)
+
+    track = sub.add_parser("track", help="detect + track robots, render debug video")
+    track.add_argument("source")
+    track.add_argument("--config", default="config.yaml")
+    track.add_argument("--detector", choices=["color", "yolo"], default="color")
+    track.add_argument("--fps", type=float, default=6.0)
+    track.add_argument("--start", type=float, default=0.0)
+    track.add_argument("--duration", type=float)
+    track.add_argument("--debug-video", metavar="OUT.mp4",
+                       help="write annotated video (boxes, IDs, alliance, state)")
+    track.set_defaults(func=_cmd_track)
 
     args = parser.parse_args(argv)
     return args.func(args)

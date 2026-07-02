@@ -6,7 +6,7 @@ match schedule, and emits per-robot scouting records (fuel scoring, cycles,
 defense, Tower climb) — every event carrying a confidence and a timestamp so a
 human can verify it.
 
-## Status: Milestone 4 of 10 — overlay OCR
+## Status: Milestone 5 of 10 — detection + tracking
 
 | # | Milestone | Status |
 |---|-----------|--------|
@@ -14,7 +14,7 @@ human can verify it.
 | 2 | Schedule fetch (TBA / FRC Events / Nexus) → 6 teams + stations | ✅ |
 | 3 | Stream ingest → frame iterator (yt-dlp + OpenCV) | ✅ |
 | 4 | FMS overlay OCR → phase / timer / score timeline | ✅ |
-| 5 | YOLO robot detection + ByteTrack tracking | ⏳ |
+| 5 | Robot detection + tracking (YOLO or color-blob; ByteTrack-style) | ✅ |
 | 6 | Bumper OCR + track↔team assignment | ⏳ |
 | 7 | Homography → field zones | ⏳ |
 | 8 | Event detection (zone+overlay heuristics, VLM disambiguation) | ⏳ |
@@ -119,6 +119,26 @@ OCR backends (`overlay.ocr_backend`): `template` — built-in zero-dependency
 NCC digit matcher, good for clean overlays and tests; `paddleocr` /
 `tesseract` for styled broadcast fonts (`pip install -e ".[ocr]"`).
 
+## Detection + tracking
+
+```bash
+frcscout track match.mp4 --fps 6 --debug-video debug.mp4          # color-blob
+frcscout track match.mp4 --detector yolo --debug-video debug.mp4  # YOLO weights
+```
+
+Two detectors behind one `Detection` interface: `yolo` (ultralytics, weights
+fine-tuned on broadcast frames with classes robot/bumper-red/bumper-blue/fuel
+— the production path, needs `pip install -e ".[vision]"` + `models.detector_weights`)
+and `color` (HSV bumper-blob detector — zero dependencies, works because FRC
+bumpers are mandated saturated red/blue; the graceful-degradation and test
+path). The tracker is ByteTrack-style: two-stage greedy IoU association
+(high-confidence first, low-confidence rescues), constant-velocity prediction,
+and explicit track states — `tentative → confirmed → lost → dead`. A lost
+robot is *reported* lost (no fabricated positions) and can be re-associated
+by alliance color + proximity when it reappears; an alliance mismatch always
+vetoes a match. `--debug-video` renders boxes/IDs/alliance/state for human
+verification.
+
 > **Note:** the committed `rubric.json` was generated in a sandbox whose
 > network policy blocks `firstfrc.blob.core.windows.net`, so all values are
 > currently `needs-verification` (seeded from public secondary sources).
@@ -180,6 +200,12 @@ src/frcscout/
     ocr.py              OCR backends: template (built-in) / tesseract / paddleocr
     parse.py            timer/score parsing -> OverlayReading
     timeline.py         phase machine + debounced score timeline
+  vision/
+    detections.py       Detection type + IoU
+    color_detector.py   HSV bumper-blob detector (no weights needed)
+    yolo_detector.py    ultralytics YOLO wrapper (production)
+    tracker.py          ByteTrack-style IoU tracker w/ lost-state + re-association
+    debug.py            annotated debug-video renderer
   rubric/
     seed.py             seeded REBUILT rubric + provenance
     patterns.py         regex extraction specs (unit-tested)
