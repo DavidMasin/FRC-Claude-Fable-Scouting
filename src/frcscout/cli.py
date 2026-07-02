@@ -56,6 +56,34 @@ def _cmd_rubric_validate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_schedule_fetch(args: argparse.Namespace) -> int:
+    from .config import load_config
+    from .schedule import ScheduleError, fetch_lineup
+    from .schedule.fetch import DEFAULT_ORDER
+
+    config = load_config(args.config)
+    match_key = args.match or config.get("match_key")
+    if not match_key:
+        print("no match key: pass --match or set match_key in config.yaml", file=sys.stderr)
+        return 2
+    providers = tuple(args.provider) if args.provider else DEFAULT_ORDER
+
+    try:
+        lineup = fetch_lineup(match_key, config, providers=providers)
+    except (ScheduleError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps(lineup.to_dict(), indent=2))
+    else:
+        print(f"{lineup.match_key}  (source: {lineup.source})")
+        for alliance in ("red", "blue"):
+            teams = "  ".join(f"{t:>5}" for t in lineup.teams(alliance))
+            print(f"  {alliance:>4}: {teams}   (stations 1-3)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="frcscout")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -75,6 +103,19 @@ def main(argv: list[str] | None = None) -> int:
     validate.add_argument("rubric", nargs="?", default="rubric.json")
     validate.add_argument("-v", "--verbose", action="store_true")
     validate.set_defaults(func=_cmd_rubric_validate)
+
+    schedule = sub.add_parser("schedule", help="match schedule tools")
+    ssub = schedule.add_subparsers(dest="schedule_command", required=True)
+
+    sfetch = ssub.add_parser("fetch", help="fetch the 6-team lineup for a match")
+    sfetch.add_argument("--match", help="match key, e.g. 2026isde1_qm14 "
+                        "(default: match_key from config)")
+    sfetch.add_argument("--config", default="config.yaml")
+    sfetch.add_argument("--provider", action="append",
+                        choices=["tba", "frc_events", "nexus"],
+                        help="force provider order (repeatable)")
+    sfetch.add_argument("--json", action="store_true", help="emit JSON")
+    sfetch.set_defaults(func=_cmd_schedule_fetch)
 
     args = parser.parse_args(argv)
     return args.func(args)

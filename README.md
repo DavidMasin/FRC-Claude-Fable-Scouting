@@ -6,12 +6,12 @@ match schedule, and emits per-robot scouting records (fuel scoring, cycles,
 defense, Tower climb) — every event carrying a confidence and a timestamp so a
 human can verify it.
 
-## Status: Milestone 1 of 10 — manual → `rubric.json`
+## Status: Milestone 2 of 10 — schedule fetch
 
 | # | Milestone | Status |
 |---|-----------|--------|
-| 1 | Game manual → `rubric.json` parser + validation | ✅ this commit |
-| 2 | Schedule fetch (TBA / FRC Events / Nexus) → 6 teams + stations | ⏳ |
+| 1 | Game manual → `rubric.json` parser + validation | ✅ |
+| 2 | Schedule fetch (TBA / FRC Events / Nexus) → 6 teams + stations | ✅ |
 | 3 | Stream ingest → frame iterator (yt-dlp + OpenCV) | ⏳ |
 | 4 | FMS overlay OCR → phase / timer / score timeline | ⏳ |
 | 5 | YOLO robot detection + ByteTrack tracking | ⏳ |
@@ -25,8 +25,8 @@ human can verify it.
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"        # milestone 1 needs only pypdf/PyYAML/requests
-pytest                          # 28 tests
+pip install -e ".[dev]"        # milestones 1-2 need only pypdf/PyYAML/requests
+pytest                          # 63 tests
 cp config.example.yaml config.yaml   # fill in API keys
 ```
 
@@ -65,6 +65,23 @@ The build prints a report: which values were confirmed from the manual, which
 patterns didn't match (those keep their seeded value and stay flagged), and
 any conflicts where the manual disagreed with the seed (manual wins, conflict
 is surfaced for human review).
+
+## The schedule (identity prior)
+
+```bash
+# 6 teams + stations for a match, trying TBA -> FRC Events -> Nexus:
+frcscout schedule fetch --match 2026isde1_qm14
+frcscout schedule fetch --json                 # match_key from config.yaml
+frcscout schedule fetch --provider nexus       # force a provider
+```
+
+Providers are tried in order; unconfigured ones are skipped and every failure
+is reported if the whole chain comes up empty. Secrets can live in
+`config.yaml` or the environment (`TBA_AUTH_KEY`, `FRC_EVENTS_USERNAME`,
+`FRC_EVENTS_AUTH_TOKEN`, `NEXUS_API_KEY`); the file wins when both are set.
+The resulting `MatchLineup` (6 slots, station-ordered, validated: 3 red +
+3 blue, unique teams) is the identity prior the tracker assigns robots
+against — see `src/frcscout/schedule/model.py`.
 
 > **Note:** the committed `rubric.json` was generated in a sandbox whose
 > network policy blocks `firstfrc.blob.core.windows.net`, so all values are
@@ -110,7 +127,15 @@ the build prompt; each stage exposes uncertainty rather than papering over it.
 
 ```
 src/frcscout/
-  cli.py                frcscout CLI (rubric build|validate)
+  cli.py                frcscout CLI (rubric build|validate, schedule fetch)
+  config.py             config.yaml loader (+ env-var secret fallback)
+  schedule/
+    model.py            MatchLineup/RobotSlot (validated 6-team identity prior)
+    matchkey.py         TBA match-key parsing incl. double-elim mapping
+    tba.py              The Blue Alliance API v3 (primary)
+    frc_events.py       FRC Events API v3.0 (fallback)
+    nexus.py            Nexus API v1 (fallback)
+    fetch.py            provider chain + error aggregation
   rubric/
     seed.py             seeded REBUILT rubric + provenance
     patterns.py         regex extraction specs (unit-tested)
