@@ -207,6 +207,26 @@ def test_cycle_start_end():
     assert engine.step(_ctx(47.0, "teleop", [scoring])) == []
 
 
+def test_stale_rubric_rejected_at_startup():
+    """A rubric.json from an older version must fail fast with guidance —
+    not crash 12 minutes into a run (the 2026flta_qm1 Railway incident)."""
+    stale = seed_rubric()
+    del stale["event_types"]["score_correction"]
+    with pytest.raises(ValueError, match="score_correction.*Regenerate"):
+        EventEngine(stale)
+
+
+def test_repo_rubric_json_in_sync_with_seed():
+    """The committed rubric.json ships in the Docker image; if the seed's
+    event contract grows, the file must be regenerated in the same commit."""
+    import json
+    from pathlib import Path
+
+    repo_rubric = json.loads(
+        (Path(__file__).parent.parent / "rubric.json").read_text())
+    assert set(repo_rubric["event_types"]) == set(seed_rubric()["event_types"])
+
+
 def test_all_emitted_types_exist_in_rubric():
     rubric = seed_rubric()
     engine = EventEngine(rubric)

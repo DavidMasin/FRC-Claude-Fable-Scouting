@@ -30,6 +30,14 @@ _AMBIG_CONF = 0.5
 _SINGLE_CONF = 0.85
 _UNATTRIBUTED_CONF = 0.3
 
+# every type the pipeline can emit; a rubric missing any of these would
+# crash a run mid-match, so refuse it up front instead
+REQUIRED_EVENT_TYPES = frozenset({
+    "fuel_scored", "climb_level_1", "climb_level_2", "climb_level_3",
+    "climb_attempt_start", "score_correction",
+    "defense_start", "defense_end", "cycle_start", "cycle_end", "track_lost",
+})
+
 
 @dataclass(frozen=True)
 class TrackSnapshot:
@@ -68,6 +76,13 @@ class EventEngine:
         self.red_on_left = red_on_left
 
         self._known_types = set(rubric["event_types"])
+        missing = REQUIRED_EVENT_TYPES - self._known_types
+        if missing:
+            raise ValueError(
+                f"rubric is missing event types {sorted(missing)} — it predates "
+                "this version of frcscout. Regenerate it: "
+                "`frcscout rubric build` (or delete rubric.json to fall back "
+                "to the built-in seed)")
         self.fuel_pts_auto, self._fuel_auto_ok = _points_value(rubric, "fuel_hub_auto")
         self.fuel_pts_teleop, self._fuel_teleop_ok = _points_value(rubric, "fuel_hub_teleop")
         self.tower_pts = {}
