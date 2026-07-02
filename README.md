@@ -47,7 +47,12 @@ cycles, endgame climb, defense seconds, full event log with confidences and
 flags, alliance reconciliation vs the overlay scoreboard) and a flat
 `out/<match>.csv` for scouting-database import. Broadcast cuts/replays are
 detected (SceneGuard) and suspend tracking + attribution until the shot
-stabilizes; the count of suspended frames is reported.
+stabilizes; the count of suspended frames is reported. A confirmed robot
+going untracked emits a `track_lost` event (flag `tracking_gap`) so the
+record shows the observation gap instead of silence. With `--vlm`, the
+pipeline feeds the Claude disambiguator crops of the candidate robots from
+the most recent stable frame — it's only consulted on ambiguous
+attributions, and responses are disk-cached.
 
 ## After the match
 
@@ -161,8 +166,16 @@ bootstrap: it dumps timestamped JPEGs for annotation.
 ## Overlay OCR (phase + score timeline)
 
 ```bash
+frcscout overlay autodetect match.mp4 --start 300   # find the crop regions
 frcscout overlay read match.mp4 --fps 4 --expect-final 112:98
 ```
+
+`autodetect` samples a few frames of live play and finds the regions itself:
+bright text lines are OCR'd, candidates are clustered across frames (the
+overlay is static; drifting bumper numbers and non-parsing text drop out),
+the cluster whose value strictly decreases is the timer, and the aligned
+non-decreasing integers flanking it are the scores (left = red, right =
+blue). It prints a paste-ready `overlay.regions` config snippet.
 
 Crops the configured overlay regions (`overlay.regions`, fractional boxes so
 they're resolution-independent), OCRs timer + both scores every sampled frame,
@@ -319,6 +332,7 @@ src/frcscout/
     frames.py           sampled Frame iterator (replay + live semantics)
   overlay/
     regions.py          fractional crop regions (per-broadcast config)
+    autodetect.py       find timer/score regions automatically
     ocr.py              OCR backends: template (built-in) / tesseract / paddleocr
     parse.py            timer/score parsing -> OverlayReading
     timeline.py         phase machine + debounced score timeline

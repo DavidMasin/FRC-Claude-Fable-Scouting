@@ -97,6 +97,28 @@ class ScoutingPipeline:
         self.engine = EventEngine(rubric, vlm=vlm, field_length_m=field_len,
                                   red_on_left=field_cfg.get("red_on_left", True))
         self._seeded = False
+        self._last_frame: np.ndarray | None = None
+        self._lost_reported: set[int] = set()
+        # a disambiguator built without a frame source gets ours
+        if vlm is not None and getattr(vlm, "frame_provider", "n/a") is None:
+            vlm.frame_provider = self._provide_crop
+
+    def _provide_crop(self, track_id: int, t: float | None) -> np.ndarray | None:
+        """Crop the most recent stable frame around a track (for the VLM)."""
+        if self._last_frame is None:
+            return None
+        track = next((tr for tr in self.tracker.tracks
+                      if tr.track_id == track_id), None)
+        if track is None:
+            return None
+        h, w = self._last_frame.shape[:2]
+        x0, y0, x1, y1 = track.xyxy
+        pad_x, pad_y = 0.4 * (x1 - x0), 0.4 * (y1 - y0)
+        x0, x1 = max(0, int(x0 - pad_x)), min(w, int(x1 + pad_x))
+        y0, y1 = max(0, int(y0 - pad_y)), min(h, int(y1 + pad_y))
+        if x1 <= x0 or y1 <= y0:
+            return None
+        return self._last_frame[y0:y1, x0:x1].copy()
 
     # ---- helpers -----------------------------------------------------------
 
@@ -118,6 +140,26 @@ class ScoutingPipeline:
                 team=a.team if a else None, xyxy=tr.xyxy,
                 field_xy=field_xy, zones=zones))
         return snaps
+
+    def _track_lost_events(self, frame):
+        from .events.model import ScoutingEvent
+        from .vision.tracker import LOST
+
+        events = []
+        assignments = self.assigner.assignments()
+        for tr in self.tracker.tracks:
+            if tr.state == LOST and tr.track_id not in self._lost_reported:
+                self._lost_reported.add(tr.track_id)
+                a = assignments.get(tr.track_id)
+                events.append(ScoutingEvent(
+                    t_video=frame.t_video, type="track_lost",
+                    match_time_s=self.timeline.match_time(),
+                    alliance=tr.alliance, track_id=tr.track_id,
+                    team=a.team if a else None, conf=1.0, source="heuristic",
+                    frame_index=frame.index, flags=("tracking_gap",)))
+            elif tr.state != LOST:
+                self._lost_reported.discard(tr.track_id)
+        return events
 
     # ---- main loop ------------------------------------------------------------
 
@@ -153,9 +195,17 @@ class ScoutingPipeline:
                         n_unstable += 1
                         continue  # cut/replay: no tracking, no attribution
 
+                    self._last_frame = frame.image
                     confirmed = self.tracker.update(
                         self.detector.detect(frame.image), frame.t_video,
                         frame.image.shape[:2])
+
+                    # a confirmed robot going LOST is itself an observation:
+                    # downstream sees the gap instead of trusting silence
+                    for ev in self._track_lost_events(frame):
+                        self.engine.events.append(ev)
+                        if on_event is not None:
+                            on_event(ev)
 
                     if not self._seeded and len(confirmed) == 6:
                         self.assigner.seed_station_prior(confirmed)

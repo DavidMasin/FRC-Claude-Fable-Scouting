@@ -280,6 +280,39 @@ def _cmd_track(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_overlay_autodetect(args: argparse.Namespace) -> int:
+    import yaml
+
+    from .ingest import FrameIterator, IngestError, resolve_source
+    from .overlay.autodetect import autodetect_regions
+    from .overlay.ocr import get_backend
+
+    backend = get_backend(args.backend)
+    frames = []
+    try:
+        src = resolve_source(args.source)
+        with FrameIterator(src.location, sample_fps=1.0 / args.spacing,
+                           start_s=args.start, live=src.is_live) as it:
+            for frame in it:
+                frames.append(frame.image)
+                if len(frames) >= args.frames:
+                    break
+    except IngestError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    if len(frames) < 3:
+        print("need at least 3 frames of live play", file=sys.stderr)
+        return 1
+    try:
+        regions = autodetect_regions(frames, backend)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    print("# paste into config.yaml:")
+    print(yaml.safe_dump({"overlay": {"regions": regions}}, sort_keys=False).rstrip())
+    return 0
+
+
 def _cmd_field_locate(args: argparse.Namespace) -> int:
     from .config import load_config
     from .field import FieldMap, ZoneMap
@@ -534,6 +567,19 @@ def main(argv: list[str] | None = None) -> int:
     oread.add_argument("--expect-final", metavar="RED:BLUE",
                        help="validate the OCR'd final score, e.g. 112:98")
     oread.set_defaults(func=_cmd_overlay_read)
+
+    odetect = osub.add_parser("autodetect",
+                              help="find timer/score crop regions automatically")
+    odetect.add_argument("source")
+    odetect.add_argument("--start", type=float, default=0.0,
+                         help="seek into live play (seconds)")
+    odetect.add_argument("--frames", type=int, default=6,
+                         help="how many sample frames to inspect")
+    odetect.add_argument("--spacing", type=float, default=2.0,
+                         help="seconds between sample frames")
+    odetect.add_argument("--backend", default="template",
+                         choices=["template", "tesseract", "paddleocr"])
+    odetect.set_defaults(func=_cmd_overlay_autodetect)
 
     track = sub.add_parser("track", help="detect + track robots, render debug video")
     track.add_argument("source")
