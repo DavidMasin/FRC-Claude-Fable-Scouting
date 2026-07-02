@@ -306,6 +306,89 @@ def _cmd_field_locate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_scout(args: argparse.Namespace) -> int:
+    from .aggregate import write_csv, write_json
+    from .config import load_config
+    from .ingest import IngestError
+    from .pipeline import ScoutingPipeline
+    from .schedule import ScheduleError, fetch_lineup
+
+    config = load_config(args.config)
+
+    rubric_path = Path(config.get("rubric_path", "rubric.json"))
+    if not rubric_path.exists():
+        print(f"{rubric_path} not found — run `frcscout rubric build` first",
+              file=sys.stderr)
+        return 2
+    rubric = json.loads(rubric_path.read_text())
+
+    if args.lineup:
+        lineup = _load_lineup(args.lineup)
+    else:
+        match_key = args.match or config.get("match_key")
+        if not match_key:
+            print("need --lineup, --match, or match_key in config", file=sys.stderr)
+            return 2
+        try:
+            lineup = fetch_lineup(match_key, config)
+        except (ScheduleError, ValueError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+
+    detector = None
+    if args.detector == "yolo":
+        from .vision.yolo_detector import YoloDetector
+
+        weights = (config.get("models") or {}).get("detector_weights")
+        detector = YoloDetector(weights)
+
+    vlm = None
+    anthropic_cfg = (config.get("apis") or {}).get("anthropic") or {}
+    if args.vlm and anthropic_cfg.get("api_key"):
+        from .events.vlm import AnthropicDisambiguator
+
+        vlm = AnthropicDisambiguator(anthropic_cfg["api_key"],
+                                     model=anthropic_cfg.get("model", "claude-fable-5"))
+
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    events_path = out_dir / f"{lineup.match_key}_events.jsonl"
+    pipeline = ScoutingPipeline(config, rubric, lineup, detector=detector, vlm=vlm)
+
+    with events_path.open("w") as events_fh:
+        def on_event(ev):
+            events_fh.write(json.dumps(ev.to_dict()) + "\n")
+            events_fh.flush()  # live consumers tail this file
+            print(f"[{ev.t_video:8.2f}s] {ev.type} team={ev.team} "
+                  f"count={ev.count} conf={ev.conf:.2f}"
+                  + (f" flags={','.join(ev.flags)}" if ev.flags else ""))
+
+        try:
+            result = pipeline.run(args.source, sample_fps=args.fps,
+                                  start_s=args.start, duration_s=args.duration,
+                                  mode=args.mode, on_event=on_event,
+                                  debug_video=args.debug_video)
+        except IngestError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+
+    json_path = write_json(result.record, out_dir / f"{lineup.match_key}.json")
+    csv_path = write_csv(result.record, out_dir / f"{lineup.match_key}.csv")
+
+    print(f"\nprocessed {result.n_frames} frames "
+          f"({result.n_unstable} suspended during cuts/replays)")
+    scores = result.record["alliances"]
+    print(f"final (overlay): red {scores['red']['overlay_final']} - "
+          f"blue {scores['blue']['overlay_final']}")
+    for alliance in ("red", "blue"):
+        if scores[alliance].get("flag"):
+            print(f"  WARNING {alliance}: vision attributed "
+                  f"{scores[alliance]['vision_attributed_points']} pts "
+                  f"vs overlay {scores[alliance]['overlay_final']}")
+    print(f"wrote {json_path}, {csv_path}, {events_path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="frcscout")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -393,6 +476,23 @@ def main(argv: list[str] | None = None) -> int:
     locate.add_argument("--config", default="config.yaml")
     locate.add_argument("--pixel", required=True, metavar="X,Y")
     locate.set_defaults(func=_cmd_field_locate)
+
+    scout = sub.add_parser("scout", help="run the full scouting pipeline on a match")
+    scout.add_argument("source", help="local file, direct URL, or YouTube URL")
+    scout.add_argument("--config", default="config.yaml")
+    scout.add_argument("--match", help="match key (schedule fetched via APIs)")
+    scout.add_argument("--lineup", metavar="LINEUP.json",
+                       help="pre-fetched lineup file (skips schedule APIs)")
+    scout.add_argument("--mode", choices=["replay", "live"], default="replay")
+    scout.add_argument("--detector", choices=["color", "yolo"], default="color")
+    scout.add_argument("--vlm", action="store_true",
+                       help="enable Claude disambiguation on ambiguous events")
+    scout.add_argument("--fps", type=float, default=6.0)
+    scout.add_argument("--start", type=float, default=0.0)
+    scout.add_argument("--duration", type=float)
+    scout.add_argument("--out-dir", default="out")
+    scout.add_argument("--debug-video", metavar="OUT.mp4")
+    scout.set_defaults(func=_cmd_scout)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -6,7 +6,7 @@ match schedule, and emits per-robot scouting records (fuel scoring, cycles,
 defense, Tower climb) — every event carrying a confidence and a timestamp so a
 human can verify it.
 
-## Status: Milestone 8 of 10 — event detection
+## Status: all 10 milestones built
 
 | # | Milestone | Status |
 |---|-----------|--------|
@@ -18,8 +18,33 @@ human can verify it.
 | 6 | Bumper OCR + track↔team assignment | ✅ |
 | 7 | Homography → field zones | ✅ |
 | 8 | Event detection (zone+overlay heuristics, VLM disambiguation) | ✅ |
-| 9 | Aggregation, reconciliation, JSON/CSV export | ⏳ |
-| 10 | Live mode wrapper | ⏳ |
+| 9 | Aggregation, reconciliation, JSON/CSV export | ✅ |
+| 10 | Live/replay pipeline (`frcscout scout`) w/ scene-cut guard | ✅ |
+
+Remaining before real-event use: verify `rubric.json` against the actual
+manual (`frcscout rubric build --fetch`), train YOLO weights on labeled
+broadcast frames (`frcscout ingest sample` bootstraps the dataset), measure
+zone polygons from the field drawings, and calibrate the homography per
+broadcast camera. Everything is unit/e2e-tested against synthetic broadcasts.
+
+## Quick start (full pipeline)
+
+```bash
+frcscout rubric build --fetch                       # manual -> rubric.json
+frcscout schedule fetch --match 2026isde1_qm14 --json > lineup.json
+frcscout scout match.mp4 --lineup lineup.json --debug-video debug.mp4
+# live: frcscout scout "https://youtube.com/watch?v=..." --match 2026isde1_qm14 --mode live
+```
+
+`scout` runs ingest → overlay OCR → detect/track → identify → field-map →
+events → aggregate. It streams confirmed events to
+`out/<match>_events.jsonl` as they happen (live consumers tail this), then
+writes the per-match record `out/<match>.json` (per-robot auto/teleop fuel,
+cycles, endgame climb, defense seconds, full event log with confidences and
+flags, alliance reconciliation vs the overlay scoreboard) and a flat
+`out/<match>.csv` for scouting-database import. Broadcast cuts/replays are
+detected (SceneGuard) and suspend tracking + attribution until the shot
+stabilizes; the count of suspended frames is reported.
 
 ## Setup
 
@@ -235,8 +260,13 @@ the build prompt; each stage exposes uncertainty rather than papering over it.
 
 ```
 src/frcscout/
-  cli.py                frcscout CLI (rubric build|validate, schedule fetch)
+  cli.py                frcscout CLI (rubric, schedule, ingest, overlay,
+                        track, field, scout)
   config.py             config.yaml loader (+ env-var secret fallback)
+  pipeline.py           full-pipeline orchestrator + SceneGuard (cut detection)
+  aggregate/
+    records.py          per-robot records + scoreboard reconciliation
+    export.py           per-match JSON + flat CSV
   schedule/
     model.py            MatchLineup/RobotSlot (validated 6-team identity prior)
     matchkey.py         TBA match-key parsing incl. double-elim mapping
