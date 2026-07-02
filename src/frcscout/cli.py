@@ -178,8 +178,19 @@ def _cmd_overlay_read(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_lineup(path: str):
+    from .schedule.model import lineup_from_alliances
+
+    data = json.loads(Path(path).read_text())
+    return lineup_from_alliances(data["match_key"], data["event_key"],
+                                 data.get("source", "file"),
+                                 data["red"], data["blue"])
+
+
 def _cmd_track(args: argparse.Namespace) -> int:
+    from .identify import TeamAssigner, read_bumper
     from .ingest import FrameIterator, IngestError, resolve_source
+    from .overlay.ocr import get_backend
     from .vision import ColorBlobDetector, IouTracker
     from .vision.debug import DebugVideoWriter, draw_tracks
     from .vision.tracker import LOST
@@ -199,10 +210,18 @@ def _cmd_track(args: argparse.Namespace) -> int:
     else:
         detector = ColorBlobDetector()
 
+    assigner = None
+    ocr_backend = None
+    bumper_band = (0.0, 1.0) if args.detector == "color" else (0.55, 1.0)
+    if args.lineup:
+        assigner = TeamAssigner(_load_lineup(args.lineup))
+        ocr_backend = get_backend(args.bumper_backend)
+
     tracker = IouTracker()
     writer = None
     n_frames = 0
     lost_events = 0
+    seeded = False
     was_lost: set[int] = set()
     try:
         src = resolve_source(args.source)
@@ -210,8 +229,18 @@ def _cmd_track(args: argparse.Namespace) -> int:
                            duration_s=args.duration, live=src.is_live) as frames:
             for frame in frames:
                 shape = frame.image.shape[:2]
-                tracker.update(detector.detect(frame.image), frame.t_video, shape)
+                confirmed = tracker.update(detector.detect(frame.image),
+                                           frame.t_video, shape)
                 n_frames += 1
+                if assigner is not None:
+                    if not seeded and len(confirmed) == 6:
+                        assigner.seed_station_prior(confirmed)
+                        seeded = True
+                    for tr in confirmed:
+                        digits, conf = read_bumper(frame.image, tr.xyxy,
+                                                   ocr_backend, band=bumper_band)
+                        if digits and tr.alliance:
+                            assigner.add_ocr(tr.track_id, tr.alliance, digits, conf)
                 for tr in tracker.tracks:
                     if tr.state == LOST and tr.track_id not in was_lost:
                         was_lost.add(tr.track_id)
@@ -222,7 +251,8 @@ def _cmd_track(args: argparse.Namespace) -> int:
                     if writer is None:
                         writer = DebugVideoWriter(args.debug_video, args.fps,
                                                   (shape[1], shape[0]))
-                    writer.write(draw_tracks(frame.image, tracker.tracks))
+                    labels = assigner.team_labels() if assigner else None
+                    writer.write(draw_tracks(frame.image, tracker.tracks, labels))
     except IngestError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
@@ -239,6 +269,12 @@ def _cmd_track(args: argparse.Namespace) -> int:
           f"(red {by_alliance['red']}, blue {by_alliance['blue']}, "
           f"unknown {by_alliance[None]})")
     print(f"lost-track episodes: {lost_events}")
+    if assigner is not None:
+        print("team assignments:")
+        for tid, a in sorted(assigner.assignments().items()):
+            team = a.team if a.team is not None else "unassigned"
+            print(f"  track #{tid}: {team}  conf={a.confidence:.2f} "
+                  f"evidence={a.evidence:.1f}")
     if args.debug_video:
         print(f"debug video: {args.debug_video}")
     return 0
@@ -318,6 +354,11 @@ def main(argv: list[str] | None = None) -> int:
     track.add_argument("--duration", type=float)
     track.add_argument("--debug-video", metavar="OUT.mp4",
                        help="write annotated video (boxes, IDs, alliance, state)")
+    track.add_argument("--lineup", metavar="LINEUP.json",
+                       help="6-team lineup (from `frcscout schedule fetch --json`); "
+                            "enables bumper OCR + team assignment")
+    track.add_argument("--bumper-backend", default="template",
+                       choices=["template", "tesseract", "paddleocr"])
     track.set_defaults(func=_cmd_track)
 
     args = parser.parse_args(argv)

@@ -6,7 +6,7 @@ match schedule, and emits per-robot scouting records (fuel scoring, cycles,
 defense, Tower climb) — every event carrying a confidence and a timestamp so a
 human can verify it.
 
-## Status: Milestone 5 of 10 — detection + tracking
+## Status: Milestone 6 of 10 — team identity
 
 | # | Milestone | Status |
 |---|-----------|--------|
@@ -15,7 +15,7 @@ human can verify it.
 | 3 | Stream ingest → frame iterator (yt-dlp + OpenCV) | ✅ |
 | 4 | FMS overlay OCR → phase / timer / score timeline | ✅ |
 | 5 | Robot detection + tracking (YOLO or color-blob; ByteTrack-style) | ✅ |
-| 6 | Bumper OCR + track↔team assignment | ⏳ |
+| 6 | Bumper OCR + track↔team assignment | ✅ |
 | 7 | Homography → field zones | ⏳ |
 | 8 | Event detection (zone+overlay heuristics, VLM disambiguation) | ⏳ |
 | 9 | Aggregation, reconciliation, JSON/CSV export | ⏳ |
@@ -139,6 +139,25 @@ by alliance color + proximity when it reappears; an alliance mismatch always
 vetoes a match. `--debug-video` renders boxes/IDs/alliance/state for human
 verification.
 
+## Team identity (track ↔ team assignment)
+
+```bash
+frcscout schedule fetch --match 2026isde1_qm14 --json > lineup.json
+frcscout track match.mp4 --lineup lineup.json --debug-video debug.mp4
+```
+
+Identity is a 6-way assignment problem against the schedule, never open-set
+OCR. Evidence accumulates per (track, team): a station prior at match start
+(station order ↔ image-x order, refined by homography in milestone 7) and
+opportunistic bumper OCR reads, fuzzy-matched against only the 3 expected
+numbers on that track's alliance (a partial `598` counts toward 5987; a read
+matching nobody counts nowhere). The solver brute-forces the track→team
+bijection per alliance (exact at 3×3) with hysteresis — a challenger must
+beat the incumbent by a margin, so one noisy read can never flip a confident
+assignment, while repeated contrary evidence can. Every assignment carries a
+confidence (softmax over that track's evidence, damped when evidence is
+thin); the debug renderer marks low-confidence labels with `?`.
+
 > **Note:** the committed `rubric.json` was generated in a sandbox whose
 > network policy blocks `firstfrc.blob.core.windows.net`, so all values are
 > currently `needs-verification` (seeded from public secondary sources).
@@ -200,6 +219,9 @@ src/frcscout/
     ocr.py              OCR backends: template (built-in) / tesseract / paddleocr
     parse.py            timer/score parsing -> OverlayReading
     timeline.py         phase machine + debounced score timeline
+  identify/
+    bumper_ocr.py       bumper-band crop + digit OCR (evidence only)
+    assignment.py       fuzzy match + per-alliance assignment solver w/ hysteresis
   vision/
     detections.py       Detection type + IoU
     color_detector.py   HSV bumper-blob detector (no weights needed)
