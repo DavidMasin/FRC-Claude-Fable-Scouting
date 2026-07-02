@@ -31,6 +31,7 @@ rubric_path: "rubric.json"
 # of the frame. Auto-detection (milestone 4) refines these.
 overlay:
   layout: "firstinspires_2026_default"
+  ocr_backend: "template"      # template | tesseract | paddleocr
   regions:
     match_timer: [0.44, 0.02, 0.12, 0.06]
     red_score:   [0.30, 0.02, 0.10, 0.06]

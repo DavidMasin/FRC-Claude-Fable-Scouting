@@ -6,14 +6,14 @@ match schedule, and emits per-robot scouting records (fuel scoring, cycles,
 defense, Tower climb) — every event carrying a confidence and a timestamp so a
 human can verify it.
 
-## Status: Milestone 3 of 10 — stream ingest
+## Status: Milestone 4 of 10 — overlay OCR
 
 | # | Milestone | Status |
 |---|-----------|--------|
 | 1 | Game manual → `rubric.json` parser + validation | ✅ |
 | 2 | Schedule fetch (TBA / FRC Events / Nexus) → 6 teams + stations | ✅ |
 | 3 | Stream ingest → frame iterator (yt-dlp + OpenCV) | ✅ |
-| 4 | FMS overlay OCR → phase / timer / score timeline | ⏳ |
+| 4 | FMS overlay OCR → phase / timer / score timeline | ✅ |
 | 5 | YOLO robot detection + ByteTrack tracking | ⏳ |
 | 6 | Bumper OCR + track↔team assignment | ⏳ |
 | 7 | Homography → field zones | ⏳ |
@@ -99,6 +99,26 @@ source frame index + video time; `--start/--duration` window a single match
 out of a long event VOD. `ingest sample` doubles as the labeled-dataset
 bootstrap: it dumps timestamped JPEGs for annotation.
 
+## Overlay OCR (phase + score timeline)
+
+```bash
+frcscout overlay read match.mp4 --fps 4 --expect-final 112:98
+```
+
+Crops the configured overlay regions (`overlay.regions`, fractional boxes so
+they're resolution-independent), OCRs timer + both scores every sampled frame,
+and reconstructs the match: phase changes (`auto → between_periods → teleop →
+endgame → post_match`, timing from `rubric.json`) and a debounced score
+timeline. Nothing is trusted from one frame: a score needs 2 consecutive
+identical reads to confirm, and decreases or implausible jumps need 4 (real
+scorekeeper corrections surface as `correction` events; OCR spikes like
+`5 → 58 → 5` are dropped). `--expect-final` cross-checks the OCR'd final
+score against the known result.
+
+OCR backends (`overlay.ocr_backend`): `template` — built-in zero-dependency
+NCC digit matcher, good for clean overlays and tests; `paddleocr` /
+`tesseract` for styled broadcast fonts (`pip install -e ".[ocr]"`).
+
 > **Note:** the committed `rubric.json` was generated in a sandbox whose
 > network policy blocks `firstfrc.blob.core.windows.net`, so all values are
 > currently `needs-verification` (seeded from public secondary sources).
@@ -155,6 +175,11 @@ src/frcscout/
   ingest/
     source.py           file/URL/YouTube resolution (yt-dlp)
     frames.py           sampled Frame iterator (replay + live semantics)
+  overlay/
+    regions.py          fractional crop regions (per-broadcast config)
+    ocr.py              OCR backends: template (built-in) / tesseract / paddleocr
+    parse.py            timer/score parsing -> OverlayReading
+    timeline.py         phase machine + debounced score timeline
   rubric/
     seed.py             seeded REBUILT rubric + provenance
     patterns.py         regex extraction specs (unit-tested)

@@ -130,6 +130,54 @@ def _cmd_ingest_sample(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_overlay_read(args: argparse.Namespace) -> int:
+    from .config import load_config
+    from .ingest import FrameIterator, IngestError, resolve_source
+    from .overlay.ocr import get_backend
+    from .overlay.parse import read_overlay
+    from .overlay.timeline import OverlayTimeline, PhaseChange, ScoreChange
+
+    config = load_config(args.config)
+    regions = (config.get("overlay") or {}).get("regions") or {}
+    if not regions:
+        print("no overlay.regions in config", file=sys.stderr)
+        return 2
+    backend = get_backend(args.backend
+                          or (config.get("overlay") or {}).get("ocr_backend")
+                          or "template")
+
+    rubric_path = Path(config.get("rubric_path", "rubric.json"))
+    if rubric_path.exists():
+        timeline = OverlayTimeline.from_rubric(json.loads(rubric_path.read_text()))
+    else:
+        timeline = OverlayTimeline()
+
+    try:
+        src = resolve_source(args.source)
+        with FrameIterator(src.location, sample_fps=args.fps, start_s=args.start,
+                           duration_s=args.duration, live=src.is_live) as frames:
+            for frame in frames:
+                reading = read_overlay(frame.image, frame.t_video, regions, backend)
+                for event in timeline.add(reading):
+                    if isinstance(event, PhaseChange):
+                        print(f"[{event.t_video:8.2f}s] phase -> {event.phase}")
+                    elif isinstance(event, ScoreChange):
+                        print(f"[{event.t_video:8.2f}s] {event.alliance} "
+                              f"{event.delta:+d} -> {event.total} ({event.kind})")
+    except IngestError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"final: red {timeline.scores['red']} - blue {timeline.scores['blue']}")
+    if args.expect_final:
+        red, blue = (int(x) for x in args.expect_final.split(":"))
+        ok = (timeline.scores["red"], timeline.scores["blue"]) == (red, blue)
+        print("scoreboard cross-check:", "OK" if ok else
+              f"MISMATCH (expected {red}:{blue})")
+        return 0 if ok else 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="frcscout")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -179,6 +227,21 @@ def main(argv: list[str] | None = None) -> int:
     sample.add_argument("--max", type=int, help="stop after N frames")
     sample.add_argument("--out", default="data/samples")
     sample.set_defaults(func=_cmd_ingest_sample)
+
+    overlay = sub.add_parser("overlay", help="FMS overlay OCR tools")
+    osub = overlay.add_subparsers(dest="overlay_command", required=True)
+
+    oread = osub.add_parser("read", help="OCR the overlay into a phase/score timeline")
+    oread.add_argument("source")
+    oread.add_argument("--config", default="config.yaml")
+    oread.add_argument("--backend", choices=["template", "tesseract", "paddleocr"],
+                       help="override OCR backend")
+    oread.add_argument("--fps", type=float, default=4.0)
+    oread.add_argument("--start", type=float, default=0.0)
+    oread.add_argument("--duration", type=float)
+    oread.add_argument("--expect-final", metavar="RED:BLUE",
+                       help="validate the OCR'd final score, e.g. 112:98")
+    oread.set_defaults(func=_cmd_overlay_read)
 
     args = parser.parse_args(argv)
     return args.func(args)
