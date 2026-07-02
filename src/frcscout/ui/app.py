@@ -23,9 +23,8 @@ def _load_setup(config_path: str):
     from ..config import load_config
     from ..rubric.build import build_rubric
 
-    config = {}
-    if Path(config_path).exists():
-        config = load_config(config_path)
+    # missing file is fine: API keys still arrive via environment variables
+    config = load_config(config_path, allow_missing=True)
     rubric_path = Path(config.get("rubric_path", "rubric.json"))
     if rubric_path.exists():
         rubric = json.loads(rubric_path.read_text())
@@ -44,8 +43,11 @@ def _parse_teams(text: str) -> list[int]:
 def create_app(config_path: str = "config.yaml", out_dir: str = "out") -> Flask:
     app = Flask(__name__)
     app.config["JSON_SORT_KEYS"] = False
+    app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 ** 3  # 4 GB VOD uploads
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    uploads = out / "uploads"
+    uploads.mkdir(exist_ok=True)
     manager = JobManager()
 
     def _runner(params: dict):
@@ -109,13 +111,23 @@ def create_app(config_path: str = "config.yaml", out_dir: str = "out") -> Flask:
 
     # ---- API ------------------------------------------------------------------
 
+    @app.get("/healthz")
+    def healthz():
+        return {"status": "ok"}
+
     @app.post("/api/scout")
     def api_scout():
         params = request.get_json(force=True) if request.is_json \
             else request.form.to_dict()
+        upload = request.files.get("video")
+        if upload and upload.filename:
+            safe = re.sub(r"[^A-Za-z0-9._-]", "_", upload.filename)
+            dest = uploads / safe
+            upload.save(dest)
+            params["source"] = str(dest)
         source = (params.get("source") or "").strip()
         if not source:
-            return jsonify({"error": "source is required"}), 400
+            return jsonify({"error": "source is required (URL, path, or upload)"}), 400
         match_key = (params.get("match_key") or "").strip().lower() or "manual_qm1"
         if not _KEY_RE.match(match_key):
             return jsonify({"error": "match key: lowercase letters/digits/_ only"}), 400

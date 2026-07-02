@@ -18,13 +18,19 @@ _ENV_FALLBACKS = [
 ]
 
 
-def load_config(path: str | Path = "config.yaml") -> dict:
+def load_config(path: str | Path = "config.yaml", allow_missing: bool = False) -> dict:
+    """Load config.yaml; with allow_missing, a missing file yields an empty
+    config that still picks up secrets from the environment (the deployment
+    case: PaaS env vars, no file)."""
     p = Path(path)
     if not p.exists():
-        raise FileNotFoundError(
-            f"{p} not found — copy config.example.yaml to config.yaml and fill it in"
-        )
-    config = yaml.safe_load(p.read_text()) or {}
+        if not allow_missing:
+            raise FileNotFoundError(
+                f"{p} not found — copy config.example.yaml to config.yaml and fill it in"
+            )
+        config: dict = {}
+    else:
+        config = yaml.safe_load(p.read_text()) or {}
     apis = config.setdefault("apis", {})
     for (section, key), env_var in _ENV_FALLBACKS:
         target = apis.setdefault(section, {})

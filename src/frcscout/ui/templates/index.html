@@ -8,9 +8,14 @@ zones — nothing to measure.</p>
 
 <div class="grid cols-2">
   <div class="card">
-    <form class="start" method="post" action="/api/scout">
+    <form class="start" method="post" action="/api/scout" enctype="multipart/form-data">
       <label>Video source</label>
-      <input name="source" placeholder="match.mp4 · https://youtube.com/watch?v=…" required>
+      <input name="source" placeholder="https://youtube.com/watch?v=… · direct URL · server path">
+
+      <label>… or upload a VOD</label>
+      <input type="file" name="video" accept="video/*">
+      <p class="hint">Give a URL/path <em>or</em> upload a file — the upload wins
+      when both are set.</p>
 
       <label>Match key <span class="hint" style="display:inline">(used for file names; or fetch lineup via TBA when API keys are configured)</span></label>
       <input name="match_key" placeholder="2026isde1_qm14">

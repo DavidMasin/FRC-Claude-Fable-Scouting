@@ -48,6 +48,29 @@ phase markers, the full event table, and download buttons for the JSON /
 CSV / bilingual reports. Light and dark theme follow the system; the
 alliance palette is CVD-validated in both.
 
+## Deploy on Railway
+
+The repo is Railway-ready (`Dockerfile` + `railway.json`, health check at
+`/healthz`):
+
+1. **Railway → New Project → Deploy from GitHub repo** and pick this repo
+   (`main`). Railway detects the Dockerfile and builds automatically.
+   CLI alternative: `railway init && railway up`.
+2. **Add a volume** mounted at **`/data`** (Service → Attach Volume) so
+   scouted matches and uploads survive redeploys — records are written to
+   `/data/out` (`FRCSCOUT_OUT_DIR`, already set in the image).
+3. **Optional env vars** (Service → Variables): `TBA_AUTH_KEY` to fetch
+   lineups by match key, `FRC_EVENTS_USERNAME`/`FRC_EVENTS_AUTH_TOKEN`,
+   `NEXUS_API_KEY`, `ANTHROPIC_API_KEY` for `--vlm`-style disambiguation.
+   No config file is needed — everything is environment-first.
+4. **Generate a domain** (Settings → Networking) and open it.
+
+On Railway you feed matches by **YouTube/direct URL** or the **upload
+field** on the start page (uploads land on the volume; up to 4 GB). Notes:
+Railway instances are CPU-only, so keep the sample FPS around 4–6; the app
+runs one gunicorn worker with 8 threads because job state is in-process —
+scale threads, not workers/replicas.
+
 ## Zero-calibration mode
 
 With an empty config the pipeline configures itself:
