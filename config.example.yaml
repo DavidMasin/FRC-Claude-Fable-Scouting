@@ -19,6 +19,10 @@ apis:
   anthropic:
     api_key: ""                 # for VLM disambiguation (milestone 8)
     model: "claude-fable-5"
+  galaxia:
+    base_url: ""                # e.g. https://galaxia.example.org
+    api_key: ""
+    path_template: "/api/scouting/matches/{match_key}"
 
 stream:
   url: ""                       # YouTube live/VOD URL

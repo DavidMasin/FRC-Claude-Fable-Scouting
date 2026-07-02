@@ -20,12 +20,15 @@ human can verify it.
 | 8 | Event detection (zone+overlay heuristics, VLM disambiguation) | ✅ |
 | 9 | Aggregation, reconciliation, JSON/CSV export | ✅ |
 | 10 | Live/replay pipeline (`frcscout scout`) w/ scene-cut guard | ✅ |
+| + | Active-learning dataset miner (`frcscout dataset mine`) | ✅ |
+| + | Galaxia push / Statbotics EPA cross-check / bilingual reports | ✅ |
 
 Remaining before real-event use: verify `rubric.json` against the actual
 manual (`frcscout rubric build --fetch`), train YOLO weights on labeled
-broadcast frames (`frcscout ingest sample` bootstraps the dataset), measure
-zone polygons from the field drawings, and calibrate the homography per
-broadcast camera. Everything is unit/e2e-tested against synthetic broadcasts.
+broadcast frames (`frcscout dataset mine` builds the dataset + label queue),
+measure zone polygons from the field drawings, and calibrate the homography
+per broadcast camera. Everything is unit/e2e-tested against synthetic
+broadcasts.
 
 ## Quick start (full pipeline)
 
@@ -45,6 +48,37 @@ flags, alliance reconciliation vs the overlay scoreboard) and a flat
 `out/<match>.csv` for scouting-database import. Broadcast cuts/replays are
 detected (SceneGuard) and suspend tracking + attribution until the shot
 stabilizes; the count of suspended frames is reported.
+
+## After the match
+
+```bash
+frcscout report out/2026isde1_qm14.json            # bilingual he/en markdown
+frcscout push out/2026isde1_qm14.json              # -> Galaxia (apis.galaxia)
+frcscout crosscheck out/2026isde1_qm14.json        # vs Statbotics EPA
+```
+
+`report` writes `<match>_report.en.md` and `<match>_report.he.md` (RTL-wrapped)
+with per-robot tables and any reconciliation warnings. `push` POSTs the full
+record to the Galaxia Flask stack (`apis.galaxia.path_template` controls the
+endpoint). `crosscheck` compares each robot's vision-attributed points to its
+Statbotics EPA (self-hosted `apis.statbotics.base_url` or statbotics.io) and
+marks large deviations `epa_outlier` — informational, a reviewer cue, not a
+verdict.
+
+## Improving the detector (active learning)
+
+```bash
+frcscout dataset mine event_vod.mp4 --fps 2 --out data/dataset
+# label the frames in data/dataset/queue/ (each JPEG has a .json of the
+# detector's own guesses to pre-fill your annotation tool), then:
+yolo detect train data=data/dataset/dataset.yaml model=yolo11n.pt
+# point models.detector_weights at runs/detect/train/weights/best.pt and
+# re-mine with --detector yolo: the queue shrinks toward the hard frames.
+```
+
+Confident frames become YOLO-format pseudo-labels (sampled every few seconds
+to avoid near-duplicates); frames with low-confidence detections — the ones
+the current detector is worst at — go to the human label queue.
 
 ## Setup
 
@@ -264,9 +298,15 @@ src/frcscout/
                         track, field, scout)
   config.py             config.yaml loader (+ env-var secret fallback)
   pipeline.py           full-pipeline orchestrator + SceneGuard (cut detection)
+  report.py             bilingual (en/he) markdown match reports
   aggregate/
     records.py          per-robot records + scoreboard reconciliation
     export.py           per-match JSON + flat CSV
+  dataset/
+    miner.py            active learning: pseudo-labels + human label queue
+  integrations/
+    galaxia.py          push records to the Galaxia scouting stack
+    statbotics.py       EPA cross-check (informational outlier flags)
   schedule/
     model.py            MatchLineup/RobotSlot (validated 6-team identity prior)
     matchkey.py         TBA match-key parsing incl. double-elim mapping

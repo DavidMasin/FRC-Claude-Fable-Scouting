@@ -389,6 +389,87 @@ def _cmd_scout(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_dataset_mine(args: argparse.Namespace) -> int:
+    from .dataset import DatasetMiner
+    from .ingest import FrameIterator, IngestError, resolve_source
+    from .vision import ColorBlobDetector
+
+    if args.detector == "yolo":
+        from .config import load_config
+        from .vision.yolo_detector import YoloDetector
+
+        config = load_config(args.config)
+        detector = YoloDetector((config.get("models") or {}).get("detector_weights"))
+    else:
+        detector = ColorBlobDetector()
+
+    tag = Path(args.source).stem[:40] or "stream"
+    miner = DatasetMiner(detector, args.out, low_conf=args.low_conf,
+                         pseudo_every_s=args.pseudo_every, source_tag=tag)
+    try:
+        src = resolve_source(args.source)
+        with FrameIterator(src.location, sample_fps=args.fps, start_s=args.start,
+                           duration_s=args.duration, live=src.is_live) as frames:
+            for frame in frames:
+                miner.process(frame.image, frame.t_video, frame.index)
+    except IngestError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    stats = miner.finalize()
+    print(json.dumps(stats, indent=2))
+    print(f"\ndataset: {args.out}/dataset.yaml  "
+          f"(train: yolo detect train data={args.out}/dataset.yaml model=yolo11n.pt)")
+    print(f"label queue: {args.out}/queue/ "
+          f"({stats['queued_for_labeling']} frames need human labels)")
+    return 0
+
+
+def _cmd_push(args: argparse.Namespace) -> int:
+    from .config import load_config
+    from .integrations import push_match
+    from .integrations.galaxia import IntegrationError
+
+    record = json.loads(Path(args.record).read_text())
+    try:
+        response = push_match(record, load_config(args.config))
+    except IntegrationError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    print(f"pushed {record['match_key']} -> {response}")
+    return 0
+
+
+def _cmd_crosscheck(args: argparse.Namespace) -> int:
+    from .config import load_config
+    from .integrations import epa_crosscheck
+
+    record = json.loads(Path(args.record).read_text())
+    rows = epa_crosscheck(record, load_config(args.config), season=args.season)
+    outliers = 0
+    for row in rows:
+        epa = f"{row['epa_mean']:.1f}" if row["epa_mean"] is not None else "n/a"
+        marker = ""
+        if row["verdict"] == "epa_outlier":
+            outliers += 1
+            marker = "  <-- check this one"
+        print(f"team {row['team']:>5} ({row['alliance']:>4}): "
+              f"attributed {row['attributed_points']:>3} pts, EPA {epa:>6} "
+              f"[{row['verdict']}]{marker}")
+    print(f"\n{outliers} outlier(s); deviations are informational, not verdicts")
+    return 0
+
+
+def _cmd_report(args: argparse.Namespace) -> int:
+    from .report import write_reports
+
+    record = json.loads(Path(args.record).read_text())
+    langs = tuple(args.langs.split(","))
+    paths = write_reports(record, args.out_dir, langs)
+    for p in paths:
+        print(f"wrote {p}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="frcscout")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -493,6 +574,40 @@ def main(argv: list[str] | None = None) -> int:
     scout.add_argument("--out-dir", default="out")
     scout.add_argument("--debug-video", metavar="OUT.mp4")
     scout.set_defaults(func=_cmd_scout)
+
+    dataset = sub.add_parser("dataset", help="detector training-data tools")
+    dsub = dataset.add_subparsers(dest="dataset_command", required=True)
+    mine = dsub.add_parser("mine", help="mine footage into a YOLO dataset + label queue")
+    mine.add_argument("source")
+    mine.add_argument("--out", default="data/dataset")
+    mine.add_argument("--config", default="config.yaml")
+    mine.add_argument("--detector", choices=["color", "yolo"], default="color")
+    mine.add_argument("--fps", type=float, default=2.0)
+    mine.add_argument("--start", type=float, default=0.0)
+    mine.add_argument("--duration", type=float)
+    mine.add_argument("--low-conf", type=float, default=0.55,
+                      help="detections below this queue the frame for human labeling")
+    mine.add_argument("--pseudo-every", type=float, default=5.0,
+                      help="seconds between pseudo-labeled keeps")
+    mine.set_defaults(func=_cmd_dataset_mine)
+
+    push = sub.add_parser("push", help="push a match record to the Galaxia stack")
+    push.add_argument("record", help="out/<match>.json")
+    push.add_argument("--config", default="config.yaml")
+    push.set_defaults(func=_cmd_push)
+
+    crosscheck = sub.add_parser("crosscheck",
+                                help="compare attributed points vs Statbotics EPA")
+    crosscheck.add_argument("record")
+    crosscheck.add_argument("--config", default="config.yaml")
+    crosscheck.add_argument("--season", type=int, default=2026)
+    crosscheck.set_defaults(func=_cmd_crosscheck)
+
+    report = sub.add_parser("report", help="bilingual (en/he) markdown match report")
+    report.add_argument("record")
+    report.add_argument("--out-dir", default="out")
+    report.add_argument("--langs", default="en,he")
+    report.set_defaults(func=_cmd_report)
 
     args = parser.parse_args(argv)
     return args.func(args)
