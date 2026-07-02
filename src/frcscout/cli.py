@@ -84,6 +84,52 @@ def _cmd_schedule_fetch(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_ingest_probe(args: argparse.Namespace) -> int:
+    from .ingest import FrameIterator, IngestError, resolve_source
+
+    try:
+        src = resolve_source(args.source)
+        with FrameIterator(src.location, live=src.is_live) as frames:
+            meta = frames.meta
+    except IngestError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    print(f"kind      : {src.kind}" + (f"  ({src.title})" if src.title else ""))
+    print(f"live      : {src.is_live}")
+    print(f"resolution: {meta.width}x{meta.height}")
+    print(f"fps       : {meta.fps:g}")
+    if meta.duration_s is not None:
+        print(f"duration  : {meta.duration_s:.1f}s ({meta.frame_count} frames)")
+    else:
+        print("duration  : unknown (live or unseekable)")
+    return 0
+
+
+def _cmd_ingest_sample(args: argparse.Namespace) -> int:
+    import cv2
+
+    from .ingest import FrameIterator, IngestError, resolve_source
+
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        src = resolve_source(args.source)
+        with FrameIterator(src.location, sample_fps=args.fps, start_s=args.start,
+                           duration_s=args.duration, live=src.is_live) as frames:
+            n = 0
+            for frame in frames:
+                name = out_dir / f"frame_{frame.index:07d}_t{frame.t_video:08.2f}.jpg"
+                cv2.imwrite(str(name), frame.image)
+                n += 1
+                if args.max and n >= args.max:
+                    break
+    except IngestError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    print(f"wrote {n} frames to {out_dir}/")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="frcscout")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -116,6 +162,23 @@ def main(argv: list[str] | None = None) -> int:
                         help="force provider order (repeatable)")
     sfetch.add_argument("--json", action="store_true", help="emit JSON")
     sfetch.set_defaults(func=_cmd_schedule_fetch)
+
+    ingest = sub.add_parser("ingest", help="stream/VOD ingestion tools")
+    isub = ingest.add_subparsers(dest="ingest_command", required=True)
+
+    probe = isub.add_parser("probe", help="print source metadata")
+    probe.add_argument("source", help="local file, direct URL, or YouTube URL")
+    probe.set_defaults(func=_cmd_ingest_probe)
+
+    sample = isub.add_parser(
+        "sample", help="dump sampled frames as JPEGs (also feeds the labeling bootstrap)")
+    sample.add_argument("source")
+    sample.add_argument("--fps", type=float, default=2.0, help="sampling rate")
+    sample.add_argument("--start", type=float, default=0.0, help="seek (seconds)")
+    sample.add_argument("--duration", type=float, help="stop after N seconds of video")
+    sample.add_argument("--max", type=int, help="stop after N frames")
+    sample.add_argument("--out", default="data/samples")
+    sample.set_defaults(func=_cmd_ingest_sample)
 
     args = parser.parse_args(argv)
     return args.func(args)

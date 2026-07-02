@@ -6,13 +6,13 @@ match schedule, and emits per-robot scouting records (fuel scoring, cycles,
 defense, Tower climb) — every event carrying a confidence and a timestamp so a
 human can verify it.
 
-## Status: Milestone 2 of 10 — schedule fetch
+## Status: Milestone 3 of 10 — stream ingest
 
 | # | Milestone | Status |
 |---|-----------|--------|
 | 1 | Game manual → `rubric.json` parser + validation | ✅ |
 | 2 | Schedule fetch (TBA / FRC Events / Nexus) → 6 teams + stations | ✅ |
-| 3 | Stream ingest → frame iterator (yt-dlp + OpenCV) | ⏳ |
+| 3 | Stream ingest → frame iterator (yt-dlp + OpenCV) | ✅ |
 | 4 | FMS overlay OCR → phase / timer / score timeline | ⏳ |
 | 5 | YOLO robot detection + ByteTrack tracking | ⏳ |
 | 6 | Bumper OCR + track↔team assignment | ⏳ |
@@ -83,6 +83,22 @@ The resulting `MatchLineup` (6 slots, station-ordered, validated: 3 red +
 3 blue, unique teams) is the identity prior the tracker assigns robots
 against — see `src/frcscout/schedule/model.py`.
 
+## Ingest
+
+```bash
+pip install -e ".[ingest]"                 # yt-dlp, for YouTube URLs
+frcscout ingest probe <file|url|youtube-url>
+frcscout ingest sample match.mp4 --fps 2 --start 300 --duration 60 --out data/samples
+```
+
+`resolve_source` turns a local file / direct media URL / YouTube page into
+something OpenCV can open (yt-dlp resolves YouTube to an HLS manifest for
+live, mp4 for VODs). `FrameIterator` hands downstream stages evenly spaced
+frames (default 6 fps sampling; tracker interpolates between) stamped with
+source frame index + video time; `--start/--duration` window a single match
+out of a long event VOD. `ingest sample` doubles as the labeled-dataset
+bootstrap: it dumps timestamped JPEGs for annotation.
+
 > **Note:** the committed `rubric.json` was generated in a sandbox whose
 > network policy blocks `firstfrc.blob.core.windows.net`, so all values are
 > currently `needs-verification` (seeded from public secondary sources).
@@ -136,6 +152,9 @@ src/frcscout/
     frc_events.py       FRC Events API v3.0 (fallback)
     nexus.py            Nexus API v1 (fallback)
     fetch.py            provider chain + error aggregation
+  ingest/
+    source.py           file/URL/YouTube resolution (yt-dlp)
+    frames.py           sampled Frame iterator (replay + live semantics)
   rubric/
     seed.py             seeded REBUILT rubric + provenance
     patterns.py         regex extraction specs (unit-tested)
