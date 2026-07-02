@@ -107,6 +107,16 @@ def test_low_confidence_flag():
     assert "ambiguous_attribution" in robot["flags"]
 
 
+def test_overlay_suspicion_surfaces_in_record():
+    record = build_match_record(
+        "2026isde1_qm14", LINEUP, [], {t: 0.5 for t in RED + BLUE},
+        {"red": 0, "blue": 0}, seed_rubric(), match_end_t=160.0,
+        overlay_suspect_deltas={"red": 7, "blue": 0})
+    assert record["alliances"]["red"]["overlay_suspect_deltas"] == 7
+    assert record["alliances"]["red"]["flag"] == "overlay_readings_suspect"
+    assert "overlay_suspect_deltas" not in record["alliances"]["blue"]
+
+
 def test_exports(tmp_path):
     events = [
         _ev(12.0, "fuel_scored", team=1690, count=6, points=6),

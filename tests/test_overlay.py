@@ -139,10 +139,25 @@ def test_ocr_spike_rejected():
 
 
 def test_huge_jump_needs_more_reads():
-    tl = OverlayTimeline(max_plausible_delta=30)
-    events = _feed(tl, [(t, 100 - t, 95, 0) for t in range(4)])
+    # large but physically possible (<= hard_max_delta): extra reads confirm it
+    tl = OverlayTimeline(max_plausible_delta=30, hard_max_delta=50)
+    events = _feed(tl, [(t, 100 - t, 45, 0) for t in range(4)])
     changes = [e for e in events if isinstance(e, ScoreChange)]
-    assert len(changes) == 1 and changes[0].total == 95  # 4 reads confirm it
+    assert len(changes) == 1 and changes[0].total == 45  # 4 reads confirm it
+
+
+def test_impossible_delta_rejected_and_counted():
+    """A wrong OCR region reading a team/match number as 'score' must never
+    become an event, no matter how consistently it reads (the flta ×132)."""
+    tl = OverlayTimeline(hard_max_delta=50)
+    events = _feed(tl, [(t, 15 - t, 132, 0) for t in range(8)])
+    assert [e for e in events if isinstance(e, ScoreChange)] == []
+    assert tl.scores["red"] == 0
+    assert tl.suspect_deltas["red"] >= 1
+    # sane readings afterwards still work
+    events = _feed(tl, [(9, 6, 4, 0), (10, 5, 4, 0)])
+    (change,) = [e for e in events if isinstance(e, ScoreChange)]
+    assert change.total == 4
 
 
 def test_score_correction_downward():

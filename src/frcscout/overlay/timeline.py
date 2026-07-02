@@ -55,13 +55,19 @@ class _PendingScore:
 class OverlayTimeline:
     def __init__(self, auto_s: float = 20, teleop_s: float = 140,
                  endgame_s: float = 30, confirm_reads: int = 2,
-                 suspicious_reads: int = 4, max_plausible_delta: int = 30) -> None:
+                 suspicious_reads: int = 4, max_plausible_delta: int = 30,
+                 hard_max_delta: int = 50) -> None:
         self.auto_s = auto_s
         self.teleop_s = teleop_s
         self.endgame_s = endgame_s
         self.confirm_reads = confirm_reads
         self.suspicious_reads = suspicious_reads
         self.max_plausible_delta = max_plausible_delta
+        # beyond this a "score change" is physically impossible in one tick —
+        # it means the OCR region is reading the wrong thing (a team number,
+        # a match number). Rejected outright and counted as region suspicion.
+        self.hard_max_delta = hard_max_delta
+        self.suspect_deltas = {"red": 0, "blue": 0}
 
         self.phase = PRE_MATCH
         self.scores = {"red": 0, "blue": 0}
@@ -157,6 +163,13 @@ class OverlayTimeline:
         pending.count += 1
 
         delta = value - confirmed
+        if abs(delta) > self.hard_max_delta:
+            if pending.count >= self.suspicious_reads:
+                # consistently reading an impossible value: the region is
+                # wrong, not the scorekeeper. Never becomes an event.
+                self.suspect_deltas[alliance] += 1
+                self._pending[alliance] = None
+            return []
         suspicious = delta < 0 or delta > self.max_plausible_delta
         needed = self.suspicious_reads if suspicious else self.confirm_reads
         if pending.count < needed:

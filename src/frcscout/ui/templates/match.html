@@ -12,11 +12,20 @@
 </p>
 
 {% for alliance in ("red", "blue") %}
-  {% if record.alliances[alliance].flag %}
+  {% set a = record.alliances[alliance] %}
+  {% if a.flag == "overlay_score_mismatch" %}
   <div class="warnbox">⚠ <b>{{ alliance }}</b>: vision attributed
-    {{ record.alliances[alliance].vision_attributed_points }} points but the
-    overlay scoreboard says {{ record.alliances[alliance].overlay_final }} —
+    {{ a.vision_attributed_points }} points but the
+    overlay scoreboard says {{ a.overlay_final }} —
     review the flagged events below.</div>
+  {% endif %}
+  {% if a.overlay_suspect_deltas %}
+  <div class="warnbox">⚠ <b>{{ alliance }}</b>: the score OCR produced
+    {{ a.overlay_suspect_deltas }} physically impossible reading(s) — the
+    overlay crop region is probably wrong for this broadcast layout. Run
+    <code>frcscout overlay autodetect</code> on the VOD and put the printed
+    regions in config, then re-scout. Treat this match's scores as
+    unreliable.</div>
   {% endif %}
 {% endfor %}
 

@@ -91,7 +91,8 @@ def build_match_record(match_key: str, lineup: MatchLineup,
                        events: list[ScoutingEvent],
                        assignment_confidences: dict[int, float],
                        final_scores: dict[str, int], rubric: dict,
-                       match_end_t: float | None = None) -> dict:
+                       match_end_t: float | None = None,
+                       overlay_suspect_deltas: dict[str, int] | None = None) -> dict:
     """assignment_confidences: team -> confidence of its track assignment."""
     by_team: dict[int, list[ScoutingEvent]] = {s.team: [] for s in lineup.slots}
     unattributed: list[ScoutingEvent] = []
@@ -120,6 +121,10 @@ def build_match_record(match_key: str, lineup: MatchLineup,
             "unattributed_events": sum(
                 1 for e in unattributed if e.alliance == alliance),
         }
+        suspect = (overlay_suspect_deltas or {}).get(alliance, 0)
+        if suspect:
+            entry["overlay_suspect_deltas"] = suspect
+            entry["flag"] = "overlay_readings_suspect"
         if overlay_total is not None and seen != overlay_total:
             entry["flag"] = "overlay_score_mismatch"
             for robot in robots:

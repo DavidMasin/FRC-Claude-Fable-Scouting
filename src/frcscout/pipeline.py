@@ -315,4 +315,5 @@ class ScoutingPipeline:
             match_key=self.lineup.match_key, lineup=self.lineup,
             events=self.engine.events, assignment_confidences=team_conf,
             final_scores=dict(self.timeline.scores), rubric=self.rubric,
-            match_end_t=match_end_t)
+            match_end_t=match_end_t,
+            overlay_suspect_deltas=dict(self.timeline.suspect_deltas))
