@@ -96,8 +96,20 @@ def test_match_time_mapping():
     tl = OverlayTimeline(auto_s=20, teleop_s=140, endgame_s=30)
     _feed(tl, [(0.0, 18, 0, 0)])
     assert tl.match_time() == pytest.approx(2.0)
-    _feed(tl, [(30.0, 135, 0, 0)])  # teleop (timer jumped up)
-    assert tl.match_time() == pytest.approx(25.0)
+    # timer restart needs consecutive agreeing reads
+    _feed(tl, [(30.0, 135, 0, 0), (30.5, 134.5, 0, 0)])
+    assert tl.match_time() == pytest.approx(25.5)
+
+
+def test_single_timer_spike_does_not_advance_period():
+    tl = OverlayTimeline(auto_s=20, teleop_s=140, endgame_s=30)
+    # mid-teleop
+    _feed(tl, [(30.0, 100, 0, 0), (30.5, 99.5, 0, 0)])
+    assert tl.phase == TELEOP
+    # one '0:07'-as-'2:07'-style spike, then sane reads again
+    _feed(tl, [(31.0, 127, 0, 0), (31.5, 99, 0, 0), (32.0, 98.5, 0, 0)])
+    assert tl.phase == TELEOP
+    assert tl.match_time() == pytest.approx(20 + 140 - 98.5)
 
 
 def test_joining_mid_match_lands_in_teleop():

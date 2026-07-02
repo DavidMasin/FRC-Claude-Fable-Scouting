@@ -69,6 +69,7 @@ class OverlayTimeline:
         self._period: int | None = None      # 0 = auto countdown, 1 = teleop countdown
         self._last_timer: float | None = None
         self._zero_reads = 0
+        self._restart_reads = 0
         self._pending: dict[str, _PendingScore | None] = {"red": None, "blue": None}
 
     @classmethod
@@ -109,11 +110,20 @@ class OverlayTimeline:
 
     def _advance_phase(self, t: float, timer: float) -> list:
         if self._last_timer is not None and timer > self._last_timer + 5:
-            # countdown restarted: next period began
+            # countdown jumped upward: either the next period started or OCR
+            # misread a digit ('0:07' as '2:07'). Trust it only when
+            # consecutive reads agree — a lone spike must not advance the
+            # period, that would derail phase tracking for the whole match.
+            self._restart_reads += 1
+            if self._restart_reads < self.confirm_reads:
+                return []
             self._period = 1 if self._period == 0 else (self._period or 0) + 1
-        elif self._period is None and timer > 0:
-            # first legible timer: infer which countdown we joined
-            self._period = 0 if timer <= self.auto_s + 1 else 1
+            self._restart_reads = 0
+        else:
+            self._restart_reads = 0
+            if self._period is None and timer > 0:
+                # first legible timer: infer which countdown we joined
+                self._period = 0 if timer <= self.auto_s + 1 else 1
 
         self._zero_reads = self._zero_reads + 1 if timer == 0 else 0
         self._last_timer = timer
